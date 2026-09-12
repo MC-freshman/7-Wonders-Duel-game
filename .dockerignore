@@ -1,0 +1,19 @@
+# 镜像上下文排除项：只打包运行期需要的产物
+node_modules
+src
+server
+scripts
+dist-server/server.mjs.map
+*.zip
+*.exe
+*.bat
+*.log
+.git
+.workbuddy
+npm-debug.log*
+package-lock.json
+tsconfig.json
+vite.config.ts
+使用说明.md
+README.md
+DEPLOY.md

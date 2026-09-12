@@ -1,0 +1,19 @@
+# 依赖与构建产物（均可由源码重建）
+node_modules/
+dist/
+dist-server/
+tsconfig.tsbuildinfo
+
+# 发布打包产物
+release/
+
+# 日志与临时文件
+*.log
+*.tmp
+Desktop.ini
+
+# 出版商版权素材（规则书 PDF / 扫描图，仅本地保存，不入公开仓库）
+docs/rules/**/*.pdf
+docs/rules/**/*.jpg
+docs/rules/**/*.jpeg
+docs/rules/**/*.png
