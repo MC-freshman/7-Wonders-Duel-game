@@ -1,5 +1,5 @@
 /* 渲染冒烟：
- *   1) 渲染首屏（奇迹选择阶段）
+ *   1) 渲染首屏（开始屏：本地模式不再自动开局）
  *   2) 推进到时代 II 中段后，渲染牌阵 / 城市面板 / 军事轨道 / 选择弹窗
  * 用以确认组件树在各阶段均无运行时异常。
  */
@@ -334,8 +334,13 @@ if (finished.victory) {
   ]);
 }
 
-let ok = first.includes('七大奇迹对决') && first.includes('track-cell');
-console.log(`${ok ? '✓' : '✗'} 首屏渲染`);
+/* 首屏是「开始屏」：本地模式不再自动开局，故此时不应有牌阵（track-cell）。
+   牌阵本身由下面的「牌阵」用例单独覆盖。 */
+let ok =
+  first.includes('七大奇迹对决') &&
+  first.includes('开始对局') &&
+  !first.includes('track-cell');
+console.log(`${ok ? '✓' : '✗'} 首屏渲染（开始屏，未自动开局）`);
 for (const [label, html] of parts) {
   // 「无待办选择→null」这一项本就应为空，其余项必须有内容
   const expectEmpty = label.includes('→null');

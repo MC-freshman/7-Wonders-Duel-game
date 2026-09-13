@@ -75,6 +75,36 @@ function topbarButton(page, text) {
   );
 }
 
+/** 首屏「开始屏」：本地三模式（人机/热座/Solo）不再自动开局，须真实鼠标点击才开始。
+ *  返回是否成功进入对局（以牌阵 track-cell 出现为准）。 */
+async function startGame(page) {
+  const clickable = await page
+    .waitForFunction(
+      () => {
+        const b = document.querySelector('.start-panel .start-btn');
+        if (!b || b.disabled) return false;
+        const r = b.getBoundingClientRect();
+        if (r.width === 0) return false;
+        const hit = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+        return hit === b || b.contains(hit);
+      },
+      { timeout: 10000, polling: 200 },
+    )
+    .then(() => true)
+    .catch(() => false);
+  diag('startGame: clickable=' + clickable);
+  if (!clickable) return false;
+  const h = await page.$('.start-panel .start-btn');
+  if (!h) return false;
+  await h.click();
+  const board = await page
+    .waitForFunction(() => !!document.querySelector('.track-cell'), { timeout: 10000, polling: 200 })
+    .then(() => true)
+    .catch(() => false);
+  diag('startGame: board=' + board);
+  return board;
+}
+
 /* ---------------- 热座整局 ---------------- */
 async function runHotseat() {
   const browser = await launch();
@@ -82,6 +112,7 @@ async function runHotseat() {
   await page.setViewport({ width: 1280, height: 900 });
   await page.goto(URL, { waitUntil: 'networkidle2' });
   await armErrorTrap(page);
+  const began = await startGame(page);
 
   let out = null;
   let batches = 0;
@@ -97,10 +128,11 @@ async function runHotseat() {
   const errs = await page.evaluate(() => window.__errs || []);
   const result = {
     phase: 'hotseat',
+    began,
     batches,
     ...out,
     pageErrors: errs.slice(0, 10),
-    pass: !!(out && out.finished && out.winnerText && (!errs.length)),
+    pass: !!(began && out && out.finished && out.winnerText && (!errs.length)),
   };
   fs.writeFileSync(outFile, JSON.stringify(result, null, 2), 'utf8');
   console.log(result.pass ? 'HOTSEAT_PASS' : 'HOTSEAT_FAIL');
@@ -199,7 +231,12 @@ async function runToggles() {
     return !(await page.evaluate(anyVisible));
   };
 
-  // 0) 切到本地热座，跳过首局奇迹选择
+  // 0) 首屏应为「开始屏」（不自动开局）→ 切到本地热座 → 点「开始对局」→ 跳过首局奇迹选择
+  const noAutoStart = await page.evaluate(
+    () => !document.querySelector('.track-cell') && !!document.querySelector('.start-panel .start-btn'),
+  );
+  diag('toggles: noAutoStart=' + noAutoStart);
+  steps.push({ step: 'first paint is start screen (no auto-start)', ok: noAutoStart });
   diag('toggles: switching to hotseat');
   await page.evaluate(() => {
     const hot = [...document.querySelectorAll('.seg button')].find((b) => b.textContent.includes('本地热座'));
@@ -207,6 +244,9 @@ async function runToggles() {
   });
   const switched = await waitSegOn('本地热座');
   diag('toggles: switched=' + switched);
+  const began = await startGame(page);
+  diag('toggles: began=' + began);
+  steps.push({ step: 'start game (real click)', ok: began });
   const firstSkip = await skipOverlay();
   diag('toggles: firstSkip=' + firstSkip);
 

@@ -892,6 +892,16 @@ button:disabled {
   align-items: start;
 }
 
+/* 开始屏（首屏不自动开局：点这里的主按钮才建局） */
+
+.start-panel .start-btn {
+  display: block;
+  margin: 2px 0 12px;
+  padding: 10px 26px;
+  font-size: 15px;
+  font-weight: 600;
+}
+
 .room-actions {
   display: flex;
   flex-direction: column;
