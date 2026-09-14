@@ -14,6 +14,7 @@ import { LogPanel, PlayerPanel, ProgressTray } from '../src/ui/components/Player
 import { RoomPanel } from '../src/ui/components/RoomPanel';
 import { ReplayView } from '../src/ui/components/ReplayView';
 import { activePlayer, applyAction, initialState, legalActions } from '../src/core/engine';
+import { publicView } from '../src/core/visibility';
 import type { GameState } from '../src/core/types';
 import type { OnlineInfo } from '../src/ui/sources/types';
 
@@ -62,8 +63,43 @@ while (!state.victory && state.age < 2 && steps < 200) {
 }
 console.log(`推进 ${steps} 步后：时代 ${state.age}，阶段 ${state.phase}，剩余 ${state.structureRemaining} 张`);
 
-const live = state.slots.filter((s) => !s.taken && s.cardId);
-const selectable = new Set(live.slice(0, 3).map((s) => s.index));
+const live = state.slots.filter((s) => !s.taken);
+const selectable = new Set(live.filter((s) => s.faceUp).slice(0, 3).map((s) => s.index));
+
+/* 桌面实际走 publicView：暗牌 cardId 被剥空。牌阵必须仍把这些槽位画成暗牌，
+   否则时代 I 只剩 2-4-6 三排明牌，金字塔叠不起来。 */
+{
+  let age1 = initialState(20260829);
+  while (age1.phase !== 'playing' && !age1.victory) {
+    const actor = activePlayer(age1);
+    if (actor === null) break;
+    const acts = legalActions(age1, actor);
+    if (acts.length === 0) break;
+    age1 = applyAction(age1, acts[0]);
+  }
+  const view = publicView(age1, 0);
+  const html = renderToString(
+    createElement(CardStructure, {
+      state: view,
+      selectableSlots: new Set(view.slots.filter((s) => !s.taken && s.faceUp).map((s) => s.index)),
+      selectedSlot: null,
+      onPick: () => {},
+    }),
+  );
+  const faceDownSlots = view.slots.filter((s) => !s.taken && !s.faceUp).length;
+  const renderedSlots = (html.match(/class="[^"]*slot/g) ?? []).length;
+  const renderedDown = (html.match(/card facedown/g) ?? []).length;
+  const pass =
+    age1.phase === 'playing' &&
+    age1.age === 1 &&
+    faceDownSlots === 8 &&
+    renderedSlots === 20 &&
+    renderedDown === 8;
+  console.log(
+    `${pass ? '✓' : '✗'} 牌阵暗牌占位（publicView：未取 ${view.slots.filter((s) => !s.taken).length} / 暗牌槽 ${faceDownSlots} / 渲染槽 ${renderedSlots} / 暗牌 ${renderedDown}）`,
+  );
+  if (!pass) process.exit(1);
+}
 
 const parts: [string, string][] = [
   [

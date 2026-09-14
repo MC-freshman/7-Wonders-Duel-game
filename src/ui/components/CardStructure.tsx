@@ -37,7 +37,9 @@ export function CardStructure({
   const prevFaceUp = useRef<Map<number, boolean>>(new Map());
   const prevAge = useRef(state.age);
 
-  const live = state.slots.filter((s) => !s.taken && s.cardId);
+  /* 未取走的槽位都要占位。publicView 会把暗牌 cardId 剥成 null，
+     若再要求 s.cardId，中间层整排消失，金字塔叠不起来。 */
+  const live = state.slots.filter((s) => !s.taken);
 
   /* 键盘焦点落点变化时，把焦点交给对应的槽位并滚入视野 */
   useEffect(() => {
