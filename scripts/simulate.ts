@@ -32,6 +32,11 @@ function assertInvariants(state: GameState): string | null {
     }
     // Pantheon：Astarte 圣库金币不可为负
     if (state.pantheon && pl.pan.astarteCoins < 0) return `玩家 ${p} Astarte 圣库为负`;
+    // Agora：影响力方块每人 12 枚（官方供给，见 docs/rules/AGORA_DATA.md §1）
+    if (state.agora) {
+      const placed = state.agora.senate.chambers.reduce((s, ch) => s + ch.cubes[p], 0);
+      if (placed > 12) return `玩家 ${p} 参议院方块 ${placed} > 12`;
+    }
     for (const id of pl.city) {
       if (!CARD_BY_ID[id]) return `未知卡牌 ${id}`;
     }

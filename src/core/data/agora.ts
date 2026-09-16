@@ -10,6 +10,13 @@ import type { CardDef, Resource } from '../types';
 
 /* ------------------------------ 参议院图板 ------------------------------ */
 
+/**
+ * 每人可用的影响方块总数（官方 24 枚 = 每人 12，见 docs/rules/AGORA_DATA.md §1）。
+ * 引擎据此做供给校验：图板上某方方块已达 12 枚时，任何「放置」都不再执行
+ * （官方 Solo 规则同样写明「Leader 面前方块用尽 → 不执行」，AGORA_SOLO_DATA §2.3）。
+ */
+export const SENATE_CUBE_SUPPLY = 12;
+
 /** 6 个 chamber 的终局分值（月桂徽，实物照片确认，对称） */
 export const CHAMBER_SCORES = [1, 2, 3, 3, 2, 1] as const;
 

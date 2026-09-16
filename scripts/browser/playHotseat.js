@@ -22,10 +22,7 @@
       errors: [],
     };
     window.addEventListener('error', (e) => window.__out.errors.push(String(e.message)));
-    // 首次调用时切到本地热座
-    const hot = all('.seg button').find((b) => b.textContent.includes('本地热座'));
-    if (hot) hot.click();
-    await sleep(250);
+    // 模式由首页卡片选定（见 e2eClickFlow.pickHomeCard）；在这里再点顶栏会重开一局，故不做
   }
   const out = window.__out;
 

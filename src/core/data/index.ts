@@ -29,6 +29,7 @@ export {
   districtOf,
   SENATORS,
   SENATOR_BY_ID,
+  SENATE_CUBE_SUPPLY,
   SENATOR_AGE_MIX,
   DECREES,
   DEGREE_BY_ID,

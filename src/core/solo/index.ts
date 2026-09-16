@@ -8,6 +8,8 @@ export {
   isSoloLeaderTurn,
   isLeaderAgoraPending,
   isLeaderPantheonPending,
+  leaderMustAct,
+  waitsForPlayerPending,
 } from './solo';
 export type { SoloOptions } from './solo';
 export { SOLO_LEADERS, SOLO_DECISION_CARDS, SOLO_COLOR_TO_TYPE } from './data';

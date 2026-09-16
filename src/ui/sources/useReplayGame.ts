@@ -1,8 +1,16 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { activePlayer } from '../../core/engine';
-import { entriesForStep, replayLength, replayTo, type ReplaySource } from '../../core/replay';
+import {
+  createSoloRunner,
+  entriesForStep,
+  replayLength,
+  replayTo,
+  type ReplaySource,
+  type SoloRunner,
+  type SoloRunInfo,
+} from '../../core/replay';
 import { publicView } from '../../core/visibility';
-import type { GameAction, LogEntry } from '../../core/types';
+import type { GameAction, GameState, LogEntry } from '../../core/types';
 import type { GameApi, ReplayControls } from './types';
 
 /* ------------------------------------------------------------------
@@ -10,6 +18,9 @@ import type { GameApi, ReplayControls } from './types';
  *
  * 不保存任何中间快照——每次跳转都从 initialState(seed) 重放前 N 个动作。
  * 单局约 70 个动作，重放耗时在毫秒级，换来的是任意跳转都能得到精确的历史画面。
+ *
+ * Solo 源例外：领袖回合要按实况同一节奏交替重演，故持有一个 `SoloRunner`
+ * 增量推进（向后跳时它自己从 seed 重建），避免每帧整体重放。
  * ------------------------------------------------------------------ */
 
 /** 每一步之间的基础间隔（毫秒），再按倍速缩放 */
@@ -21,6 +32,8 @@ export interface ReplayApi extends GameApi, ReplayControls {
   stepEntries: LogEntry[];
   /** 下一步要执行的动作，供 UI 做「即将发生」提示 */
   nextAction: GameAction | null;
+  /** Solo 复盘时的顶条信息（领袖 / 决策卡 / 牌堆），其它模式为 null */
+  solo: SoloRunInfo | null;
 }
 
 export function useReplayGame(source: ReplaySource, onExit: () => void): ReplayApi {
@@ -40,7 +53,20 @@ export function useReplayGame(source: ReplaySource, onExit: () => void): ReplayA
     return () => clearTimeout(t);
   }, [playing, index, total, speed]);
 
-  const state = useMemo(() => replayTo(source, index), [source, index]);
+  const runnerRef = useRef<SoloRunner | null>(null);
+  const runnerSrcRef = useRef<ReplaySource | null>(null);
+  if (source.solo && runnerSrcRef.current !== source) {
+    runnerSrcRef.current = source;
+    runnerRef.current = createSoloRunner(source);
+  }
+
+  const frame = useMemo((): { state: GameState; solo: SoloRunInfo | null } => {
+    const runner = runnerRef.current;
+    if (runner) return { state: (runner.seek(index), runner.game.state), solo: runner.info() };
+    return { state: replayTo(source, index), solo: null };
+  }, [source, index]);
+
+  const state = frame.state;
   const view = useMemo(() => publicView(state), [state]);
   const actor = activePlayer(state);
 
@@ -106,5 +132,6 @@ export function useReplayGame(source: ReplaySource, onExit: () => void): ReplayA
     exit,
     stepEntries,
     nextAction,
+    solo: frame.solo,
   };
 }

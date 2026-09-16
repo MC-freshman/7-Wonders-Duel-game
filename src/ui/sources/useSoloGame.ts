@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   createSoloGame,
+  leaderMustAct,
   soloApplyAction,
-  soloLeaderTurn,
   soloFinalizeVictory,
-  isLeaderAgoraPending,
-  isLeaderPantheonPending,
+  soloLeaderTurn,
 } from '../../core/solo/index';
 import type { SoloDecisionCardDef, SoloGame, SoloLeaderDef } from '../../core/solo/index';
+import type { ReplaySource } from '../../core/replay';
 import { publicView } from '../../core/visibility';
+import { activePlayer } from '../../core/engine';
 import type { GameAction } from '../../core/types';
 import { sfx } from '../audio';
 import { playSfxFor } from './useLocalGame';
@@ -41,17 +42,8 @@ export interface SoloApi extends GameApi {
   solo: SoloInfo;
 }
 
-/** 当前是否轮到领袖行动（含领袖的待决） */
-function leaderMustAct(g: SoloGame): boolean {
-  const st = g.state;
-  if (st.victory || st.phase === 'gameOver') return false;
-  if (isLeaderAgoraPending(g) || isLeaderPantheonPending(g)) return true;
-  if (st.pending) {
-    const actor = st.pending.kind === 'startPlayer' ? st.pending.chooser : st.pending.player;
-    return actor === g.leaderId;
-  }
-  return st.current === g.leaderId && (st.phase === 'playing' || st.phase === 'wonderDraft');
-}
+/* 「现在是否轮到领袖」判定见 core 的 `leaderMustAct` —— 实况与复盘共用同一份，
+   两条链路的领袖回合节奏必须逐次一致，否则 solo 随机流会错位。 */
 
 export function useSoloGame(
   enabled: boolean,
@@ -132,6 +124,27 @@ export function useSoloGame(
     setSeed(Math.floor(Math.random() * 1e9));
   }, []);
 
+  /**
+   * 复盘数据：与其它模式同为「种子 + 日志」，额外带上 Solo 元数据（本局领袖），
+   * 由 `createSoloRunner` 交替重演领袖回合。日志取快照副本：主引擎每帧换数组，
+   * 但条目对象与实况共享，冻结数组即可保证复盘期间不再被后续动作影响。
+   */
+  const replay = useCallback((): ReplaySource | null => {
+    const g = gameRef.current;
+    if (!g) return null;
+    return {
+      seed,
+      log: [...g.state.log],
+      options: { pantheon, agora },
+      solo: {
+        leaderId: g.leaderId,
+        leader: g.leader.id,
+        leaderRandom: g.leaderRandom === true,
+      },
+      names: ['你', g.leader.zh || '领袖'],
+    };
+  }, [seed, pantheon, agora]);
+
   const g = gameRef.current;
   if (!g) {
     // 未启用时返回占位对象；App 只在 mode === 'solo' 时使用本 hook 的返回值
@@ -141,6 +154,7 @@ export function useSoloGame(
       thinking: false,
       act,
       restart,
+      replay,
       online: null,
       interactive: true,
       solo: {
@@ -156,10 +170,14 @@ export function useSoloGame(
 
   return {
     view: publicView(g.state, 0),
-    actor: g.state.victory ? null : g.state.current,
+    /* 行动方必须走 `activePlayer`（与热座 / 人机 / 联机同一判定）：待决阶段里
+       `current` 仍是「刚行动的一方」，若直接用它，属于玩家的待决（如时代交接选先手、
+       科技对子选发展标记）会被判成领袖回合 —— 玩家点不到、领袖也不会处理，界面死锁。 */
+    actor: g.state.victory ? null : activePlayer(g.state),
     thinking: leaderMustAct(g),
     act,
     restart,
+    replay,
     online: null,
     interactive: true,
     solo: {

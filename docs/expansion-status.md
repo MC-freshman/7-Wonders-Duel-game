@@ -34,6 +34,7 @@
 | M8-P Pantheon Solo | `src/core/solo/pantheon/{data,pantheon,index}.ts`：3 领袖（Caligula/Sappho/Imhotep）+ 3 张 Pantheon 替换卡（⚠️ 推导值，见 `SOLO_PANTHEON_DATA.md` §5.1）+ 时代 I 神话放置 / 时代 II·III 调神 / 神明·奇迹领袖化 | ✅ |
 | M8 组合 | `SoloOptions{pantheon?,agora?}` 正交；决策牌堆恒等式 `3 Pantheon + 5 Agora + 4 无图标 = 12`；领袖池 9 位 | ✅ |
 | M8-UI 单人模式 | `src/ui/sources/useSoloGame.ts`（玩家/领袖回合分离、420ms 间隔驱动）+ `src/ui/components/SoloBar.tsx`（领袖身份 / 决策卡 / 牌堆进度 / 领袖选择器）+ 顶栏「单人 Solo」入口 | ✅ |
+| M8-R Solo 复盘 | `replay.ts` 的 `createSoloRunner`（按日志交替重演领袖回合）+ `useSoloGame.replay()` + `ReplayView` 只读 `SoloBar`；逐帧校验 `scripts/soloReplayCheck.ts` | ✅ 已完成（2026-09-16，此前的唯一功能遗留） |
 | M8-回归 | `soloSim` / `soloAgoraSim` / `soloPantheonSim`（含 combo）；renderSmoke 新增「单人 Solo 顶条」「Solo Pantheon 待决弹窗」 | ✅ |
 
 ## M7 各子项状态
@@ -105,6 +106,85 @@
 > 终局帧必现）→ 改为两端都推进再比对；② **Lighthouse 11.7.1 + Chrome 152 的 NO_LCP 兼容问题**
 > （类别分直接 null，最小页对照实验定位）→ 升 Lighthouse 13 解决。
 
+## 回归实测（2026-09-16，Solo 复盘 M8-R）
+
+### 实现要点（改引擎必读）
+
+- 复盘口径与主链路一致：**帧号 = 日志里的动作总数**（领袖与玩家都计帧）。
+- 领袖的每个动作本来就在日志里（`soloApplyAction` 走主引擎），缺的只是**交替顺序**：
+  `createSoloRunner` 每次只跑**一段** `soloLeaderTurn`，与 `useSoloGame.drive` 的
+  `while (leaderMustAct) soloLeaderTurn` 逐次同构；少一次或多一次都会让 solo 随机流错位。
+- ⚠️ 三条硬约定（破坏任一条即复盘静默错位，`replay:solo` 会红）：
+  1. 「轮到谁」判定只有 `solo/index.ts` 的 `leaderMustAct` / `waitsForPlayerPending` 一份，
+     实况 hook 与复盘器共用，不得各写一份；
+  2. 重建对局必须用**与实况完全相同的入参**：随机开局传 `undefined`、指定领袖传该 id
+     （二者随机流派生不同），故 `ReplaySource.solo` 要带 `leaderRandom`；
+  3. 主引擎 `applyAction` 每次 `structuredClone`，`state.log` 是**每帧新数组** ——
+     长耗时校验必须以「当前帧的 log」构造重放器，不能持旧引用。
+- 本次改动**不触碰玩法随机流**：用 `git stash` 前后各跑 40 局（四形态 + 固定玩家策略）比对逐局指纹，
+  结果为空 diff → 与 v0.1.2 的对局内容完全一致。中途一版曾把「抽领袖」改成无条件消耗一次 rng，
+  指纹立刻变化并被 `soloAgoraSim` 采样出一条既有不变量违规 —— 该做法已回退，
+  复盘改为「按实况同一入参重建」（见上）。
+- **顺带修掉真 bug（实况 Solo 死锁）**：`useSoloGame` 的 `actor` 此前取 `state.current`，
+  而待决阶段 `current` 仍是「刚行动的一方」→ 属于玩家的待决（时代交接选先手、科技对子选
+  发展标记）被误判成「领袖回合」，玩家点不到、领袖也不处理，界面永久停在「领袖回合」。
+  改用与其它模式同一的 `activePlayer(state)` 后消失（浏览器点击流此前 3/3 次卡死，现直通终局）。
+  同时更正 `ReplayBar` 的「下一步」在 Solo 下显示「你 / 领袖」而非「玩家一 / 玩家二」。
+
+### 验收（全部实测）
+
+| 项 | 结果 |
+|---|---|
+| `npx tsc --noEmit` | ✅ 0 错误 |
+| `check` / `sim 40` / `replay 5`（362 帧） | ✅ 无死锁、无不变量违规、逐帧一致 |
+| `smoke` | ✅ 24 项（新增「Solo 复盘视图」+「复盘顶条为只读」两条断言） |
+| **`replay:solo 4`**（新） | ✅ **16 局 / 4 形态**，随机与指定领袖两种建局路径各半，累计**逐帧比对 1329 帧**；含「回跳等价于全新重放」「回跳后再前进等于实况终局」两条 rewind 断言 |
+| `soloSim 2` / `soloAgoraSim 2` / `soloPantheonSim 2 medium` / `soloPantheonSim:combo` | ✅ 不变量错误 0、stuck 0 |
+| `build` + `server:build` | ✅ JS 323.26KB / gzip 102.27KB、CSS gzip 4.39KB（预算内） |
+| `proto:prod 2` | ✅ 2/2 局（前置断言确认在测正式产物 `index-Dq6eQvil.js`） |
+| `browser:e2e solo`（新相位） | ✅ SOLO_PASS：整局到终局 → 点「复盘本局」→ 只读 SoloBar（有 `solo-bar`、无领袖选择器）→ 单步 2 帧 → 拖到中帧（牌阵 19 格、无结算）→ 拖到末帧（重现「军事压制胜利」）→ 回拖到第 3 帧 → 退出复盘回到牌阵；0 页面错误、0 僵局 |
+| `browser:e2e hotseat` / `toggles` / `online` | ✅ 三相全过；hotseat 也接入同一段复盘 UI 断言（75 帧整局 → 复盘 → 退出） |
+
+### 同日追加：首页模式选择屏（原「可选后续项」）
+
+- `src/ui/components/HomeScreen.tsx`（新）：四张卡片 = 人机 / 热座 / 联机 / Solo；点卡片选中并
+  **就地展开该模式参数**（难度三档 / 领袖下拉 / 说明 / 联机直接进大厅），下方「开局设置」承载
+  🏛 两个扩充开关 + 实时摘要 + 「开始对局」。`TopBar` 新增 `compact`，首页只留标题与音效
+  （模式/难度/扩充/新对局不再在顶栏重复）。
+- **`started` 门语义不变**：仍是真门控（`started && mode===…` 传给 hook 的 `enabled`），
+  首页只负责「选」不负责「建局」——Solo 领袖先手，遮罩式做法会让它在屏后自行开跑。
+- UI 质量把关（用户明确要求不得把界面做旧/做糊）：只用既有设计令牌（`--panel/--line/--accent/
+  --dur-*/--ease`），无新色板、无阴影堆叠、无 `backdrop-filter`；沿用全局 `:focus-visible` 焦点环与
+  `@media (hover:none)` 触屏反馈。puppeteer 实测 1280×900（DPR 1）与 390×844（DPR 2）：
+  **横向溢出 0、无元素被裁切、同行卡片等高**，四张卡片与就地展开的领袖下拉均可见；
+  对局内顶栏与奇迹选择弹窗截图比对无变化。
+- e2e 三相依此改走新交互（旧入口在首页已收起）：新增 `pickHomeCard()` 真实鼠标点卡片，
+  `hotseat`/`toggles`/`solo` 用卡片选模式，`toggles` 另加「首页扩充开关双向 + 摘要更新」两步断言，
+  `online` 由点顶栏改为点「联机对战」卡片进大厅；`playHotseat.js`/`playSolo.js` 不再点顶栏
+  （对局中重复切模式会重开一局）。四相复跑全绿。
+
+### 同日再追加：Agora 参议院方块供给缺陷（引擎侧缺校验）
+
+- **缺陷**：引擎没有「手里还剩几枚方块」的概念，任何「放置」都无条件 `cubes[p] += 1`；
+  政治家行动数、密谋 ops、军事 token、Knossos 叠起来可让一方摆出**第 13 枚**
+  （官方每人 12 枚，`docs/rules/AGORA_DATA.md` §1；Solo 文档亦写明「面前方块用尽 → 不执行」）。
+  此前只有 `soloAgoraSim` 在局末断言 ≤12，**主仿真每步都不查**，所以长期未暴露。
+- **为何随机跑不出来**：需要「净增放置 > 12」，而 Solo 领袖侧早就自己数着方块
+  （`solo/agora/agora.ts` 的 `TOTAL_CUBES`），人类侧很少把 12 枚摆满 → 随机 120 局 0 命中；
+  一旦随机流位移（本会话曾误改抽领袖的消耗）就立刻被采样出来。
+- **修法（四层，缺一层就留下卡死或谎报）**：
+  1. `SENATE_CUBE_SUPPLY = 12` 落 `data/agora.ts`，Solo 模块改用它（不再两处各写 12）；
+  2. **入队前拦**：新增 `pushPlaceOp`，并在 Knossos 选择/建成、军事 token、密谋 ops、
+     密谋者二选一（无剩余方块时连 `'place'` 选项都不给）各 grant 点生效；
+  3. **队列排空**：`dropStarvedPlaceOps` 在 `finishAction` / `afterPending` / `resolveSenateOpsDone`
+     三个等待点丢弃已不可能执行的放置并记日志 —— 否则回合会停在 `ops[0]` 上死等（与 seed 1370 同一形状）；
+  4. **落子守卫**：`placeCube` 返回 boolean，无方块时不摆也不记「放置」日志（联机侧恶意动作也挡得住）。
+  另把「每人 ≤12」加进 `scripts/simulate.ts` 的**每步**不变量。
+- **确定性回归**：新增 `npm run check:senate`（构造边界 + 150 局 soak）。自证有效：
+  临时摘掉 `placeCube` 守卫与队列排空后，对应两条断言立刻变红（实测 13 枚 / 残留 1 个放置）。
+- 复验：`check` / `sim 40` / `sim:a 40` / 合体 40 / `replay 5` / `replay:solo 3`（1005 帧）/
+  四个 solo 仿真 / `smoke` / `perf` / `browser:e2e` 四相 / `proto:prod 2` 全绿。
+
 ## 测试入口速查
 
 ```bash
@@ -120,5 +200,7 @@ npm run soloSim -- 3                                  # base Solo
 npm run soloAgoraSim -- 3                             # Agora Solo
 npm run soloPantheonSim -- 3 medium                   # Pantheon Solo
 npm run soloPantheonSim:combo                         # Pantheon + Agora 合体（12 局）
+npm run replay:solo -- 4           # ⭐ Solo 复盘逐帧校验（四形态 × 随机/指定领袖）
+npm run browser:e2e -- solo <out.json>  # 浏览器：Solo 整局 → 复盘本局 → 拖进度 → 退出（需 puppeteer-core）
 # 第二个参数可用 easy|medium|hard 指定玩家 AI 难度
 ```

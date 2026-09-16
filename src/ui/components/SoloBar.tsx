@@ -98,6 +98,7 @@ export function SoloBar({
   pool,
   leaderId,
   onPickLeader,
+  readOnly = false,
 }: {
   leader: SoloLeaderDef;
   lastDecision: SoloDecisionCardDef | null;
@@ -105,9 +106,11 @@ export function SoloBar({
   deckLeft: number;
   pantheon: boolean;
   agora: boolean;
-  pool: SoloLeaderDef[];
-  leaderId: string | null;
-  onPickLeader: (id: string | null) => void;
+  pool?: SoloLeaderDef[];
+  leaderId?: string | null;
+  onPickLeader?: (id: string | null) => void;
+  /** 复盘只读态：领袖不可更换，标题标注「复盘」 */
+  readOnly?: boolean;
 }) {
   const tags: string[] = [];
   if (pantheon) tags.push('万神殿');
@@ -116,21 +119,23 @@ export function SoloBar({
   return (
     <div className="solo-bar">
       <span className="solo-title">
-        单人 Solo
+        {readOnly ? '单人 Solo 复盘' : '单人 Solo'}
         {tags.length > 0 ? ` · ${tags.join(' + ')}` : ''}
       </span>
 
-      <label className="solo-pick">
-        对手领袖
-        <select value={leaderId ?? ''} onChange={(e) => onPickLeader(e.target.value || null)}>
-          <option value="">随机</option>
-          {pool.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.zh}（{l.name}）
-            </option>
-          ))}
-        </select>
-      </label>
+      {!readOnly && (
+        <label className="solo-pick">
+          对手领袖
+          <select value={leaderId ?? ''} onChange={(e) => onPickLeader?.(e.target.value || null)}>
+            <option value="">随机</option>
+            {(pool ?? []).map((l) => (
+              <option key={l.id} value={l.id}>
+                {l.zh}（{l.name}）
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
 
       <span className="solo-leader">
         <span className="solo-chip" style={{ background: COLOR_HEX[leader.cardColor] }}>

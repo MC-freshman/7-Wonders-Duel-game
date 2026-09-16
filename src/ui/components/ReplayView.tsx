@@ -5,6 +5,7 @@ import { MilitaryTrack } from './MilitaryTrack';
 import { ResultOverlay } from './Overlays';
 import { LogPanel, PlayerPanel } from './PlayerPanel';
 import { ReplayBar } from './ReplayBar';
+import { SoloBar } from './SoloBar';
 
 /* ------------------------------------------------------------------
  * 复盘视图
@@ -45,6 +46,18 @@ export function ReplayView({
 
       <MilitaryTrack state={view} names={names} />
 
+      {replay.solo && (
+        <SoloBar
+          readOnly
+          leader={replay.solo.leader}
+          lastDecision={replay.solo.lastDecision}
+          deckSize={replay.solo.deckSize}
+          deckLeft={replay.solo.deckLeft}
+          pantheon={replay.solo.pantheon}
+          agora={replay.solo.agora}
+        />
+      )}
+
       <div className="main">
         <details className="collapsible" open>
           <summary>{names[0]}的城市</summary>
@@ -72,6 +85,9 @@ export function ReplayView({
 
       <div className="footer-note">
         复盘中不可操作：进度条上的第 N 步对应日志中的第 N 个动作，画面由种子重放得到，与当时完全一致。
+        {replay.solo
+          ? `　·　领袖回合按同一条随机流重演（一段领袖回合含多步时合为一帧）`
+          : ''}
         {view.discard.length > 0 ? `　·　弃牌堆 ${view.discard.length} 张` : ''}
       </div>
 

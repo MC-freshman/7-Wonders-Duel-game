@@ -1,7 +1,7 @@
 {
   "name": "7-wonders-duel-game",
   "private": true,
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,8 +14,10 @@
     "soloPantheonSim": "tsx scripts/soloPantheonSim.ts",
     "soloPantheonSim:combo": "tsx scripts/soloPantheonSim.ts 12 medium combo",
     "check": "tsx scripts/checkLayout.ts",
+    "check:senate": "tsx scripts/senateSupplyCheck.ts",
     "smoke": "tsx scripts/renderSmoke.tsx",
     "replay": "tsx scripts/replayCheck.ts",
+    "replay:solo": "tsx scripts/soloReplayCheck.ts",
     "bench": "tsx scripts/aiBench.ts",
     "server": "tsx server/index.ts",
     "server:build": "esbuild server/index.ts --bundle --platform=node --target=node18 --format=esm --outfile=dist-server/server.mjs",

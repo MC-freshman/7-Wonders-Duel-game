@@ -10,6 +10,7 @@ import {
   PANTHEON_WONDERS,
   PROGRESS_BY_ID,
   SENATOR_BY_ID,
+  SENATE_CUBE_SUPPLY,
   WONDERS,
   WONDER_BY_ID,
   ZONE_FINES,
@@ -403,6 +404,24 @@ function endAge(state: GameState): void {
   pushLog(state, null, `时代 ${state.age} 结束，由 ${chooser === 0 ? '玩家一' : '玩家二'} 决定下一时代的先手`);
 }
 
+/**
+ * 排空队列里已无从执行的「放置」操作（该方 12 枚方块已全部摆出）。
+ *
+ * 正常路径不会产出这种操作（`pushPlaceOp` 在入队前就拦掉了），但一次回合里可能
+ * 先排队了两个放置、中间把方块摆完（例：密谋「政治操盘」+ 军事 token）。
+ * 回合推进会停在 `ops[0]` 上等待，留着它就等于整局卡死。
+ */
+function dropStarvedPlaceOps(state: GameState): void {
+  const ag = state.agora;
+  if (!ag) return;
+  while (ag.ops.length > 0) {
+    const head = ag.ops[0];
+    if (head.op.kind !== 'place' || hasSpareCube(state, head.player)) return;
+    ag.ops.shift();
+    pushLog(state, head.player, '参议院：面前方块已用尽，跳过一次放置');
+  }
+}
+
 function finishAction(state: GameState, actor: PlayerId): void {
   state.lastActive = actor;
   revealSlots(state, actor);
@@ -410,6 +429,7 @@ function finishAction(state: GameState, actor: PlayerId): void {
     state.phase = phaseForPending(state.pending);
     return;
   }
+  dropStarvedPlaceOps(state);
   // Agora：自己的参议院小操作未执行完时推迟回合推进；
   // 他人的 op（如军事推进法令换手）留给对方回合执行
   if (state.agora && state.agora.ops[0]?.player === actor) {
@@ -433,6 +453,7 @@ function afterPending(state: GameState): void {
     return;
   }
   state.phase = 'playing';
+  dropStarvedPlaceOps(state);
   if (state.agora && state.agora.ops[0]?.player === actor) {
     state.agora.endTurnAfterOps = true;
     return;
@@ -764,12 +785,16 @@ function applyDraftWonder(state: GameState, action: Extract<GameAction, { type: 
   const drafted = WONDER_BY_ID[action.wonderId];
   if (state.agora && drafted) {
     if (drafted.special === 'agora-knossos') {
-      pushLog(state, p, '克诺索斯王宫：放 1 方块到任意 chamber');
-      pushAgoraStep(state, p, {
-        kind: 'pickChamber',
-        options: state.agora.senate.chambers.map((_, i) => String(i)),
-        purpose: 'place',
-      });
+      if (hasSpareCube(state, p)) {
+        pushLog(state, p, '克诺索斯王宫：放 1 方块到任意 chamber');
+        pushAgoraStep(state, p, {
+          kind: 'pickChamber',
+          options: state.agora.senate.chambers.map((_, i) => String(i)),
+          purpose: 'place',
+        });
+      } else {
+        pushLog(state, p, '克诺索斯王宫：面前方块已用尽，跳过放置');
+      }
     } else if (drafted.special === 'agora-curia') {
       const deck = state.agora.senate.conspiracyDeck;
       const draws = deck.splice(0, Math.min(2, deck.length));
@@ -853,7 +878,7 @@ function applyBuildWonder(state: GameState, p: PlayerId, slotIndex: number, wond
   // Agora 新奇迹建成效果
   if (wonder.special === 'agora-knossos') {
     // 放 1 方块 + 可移 1 方块到相邻
-    pushOp(state, p, { kind: 'place', district: 'any' });
+    pushPlaceOp(state, p, 'any');
     pushOp(state, p, { kind: 'move', optional: true });
     pushLog(state, p, '克诺索斯王宫：获得参议院操作');
   } else if (wonder.special === 'agora-curia') {
@@ -1549,16 +1574,45 @@ function pushOp(state: GameState, p: PlayerId, op: SenateOp['op']): void {
   state.agora?.ops.push({ player: p, op });
 }
 
-/** 在 chamber 放置 1 枚方块：触碰暗法令即翻开，并重算控制 */
-function placeCube(state: GameState, p: PlayerId, chamberIdx: number): void {
+/**
+ * 排队一次「放置」：方块已全部摆出时直接跳过。
+ *
+ * ⚠️ 必须在**入队时**判，不能等到枚举动作时才判 —— 回合推进会在 `ops[0]` 上等待，
+ * 一个无从执行的放置操作会把整局卡住（与 M8-P 合体 seed 1370 那类卡死同一形状）。
+ */
+function pushPlaceOp(
+  state: GameState,
+  p: PlayerId,
+  district: 'left' | 'center' | 'right' | 'any',
+): void {
+  if (!hasSpareCube(state, p)) return;
+  pushOp(state, p, { kind: 'place', district });
+}
+
+/** 图板上已摆出的方块数（供给上限见 `SENATE_CUBE_SUPPLY`） */
+function cubesPlaced(state: ReadableState, p: PlayerId): number {
+  return state.agora!.senate.chambers.reduce((s, ch) => s + ch.cubes[p], 0);
+}
+
+/** 该方手里是否还有可摆的方块 */
+function hasSpareCube(state: ReadableState, p: PlayerId): boolean {
+  return cubesPlaced(state, p) < SENATE_CUBE_SUPPLY;
+}
+
+/**
+ * 在 chamber 放置 1 枚方块：触碰暗法令即翻开，并重算控制。
+ * 方块已全部摆出时**不执行**（返回 false）——官方规则每人只有 12 枚。
+ */
+function placeCube(state: GameState, p: PlayerId, chamberIdx: number): boolean {
   const ch = state.agora!.senate.chambers[chamberIdx];
-  if (!ch) return;
+  if (!ch || !hasSpareCube(state, p)) return false;
   ch.cubes[p] += 1;
   if (ch.decree && !ch.decreeFaceUp) {
     ch.decreeFaceUp = true;
     pushLog(state, p, `参议院：翻开法令「${DEGREE_BY_ID[ch.decree]?.zh ?? ch.decree}」`);
   }
   updateChamber(state, chamberIdx);
+  return true;
 }
 
 /** 重算 chamber 控制权；控制变化时结算「军事推进」法令并检查政治霸权 */
@@ -1620,7 +1674,7 @@ function agoraZoneEntry(state: GameState, p: PlayerId, zi: number): void {
   token.used = true;
   if (token.kind === 'place') {
     pushLog(state, p, `进入「${zoneLabel(zi)}」，军事 token：放置 1 方块`);
-    pushOp(state, p, { kind: 'place', district: 'any' });
+    pushPlaceOp(state, p, 'any');
   } else {
     pushLog(state, p, `进入「${zoneLabel(zi)}」，军事 token：移动 + 移除方块`);
     pushOp(state, p, { kind: 'move' });
@@ -1630,7 +1684,8 @@ function agoraZoneEntry(state: GameState, p: PlayerId, zi: number): void {
 
 /* ------------------------------ 参议院动作的合法枚举 ------------------------------ */
 
-function allowedPlaceChambers(state: ReadableState, district: string | undefined): number[] {
+function allowedPlaceChambers(state: ReadableState, p: PlayerId, district: string | undefined): number[] {
+  if (!hasSpareCube(state, p)) return [];
   const out: number[] = [];
   state.agora!.senate.chambers.forEach((_, i) => {
     if (!district || district === 'any' || districtOf(i) === district) out.push(i);
@@ -1651,7 +1706,7 @@ function ownMovePairs(state: ReadableState, p: PlayerId): { from: number; to: nu
 function senateOpActions(state: ReadableState, p: PlayerId, head: SenateOp): GameAction[] {
   const out: GameAction[] = [];
   if (head.op.kind === 'place') {
-    for (const c of allowedPlaceChambers(state, head.op.district)) {
+    for (const c of allowedPlaceChambers(state, p, head.op.district)) {
       out.push({ type: 'SENATE_PLACE', player: p, chamber: c });
     }
   } else if (head.op.kind === 'move') {
@@ -1671,7 +1726,7 @@ function senateOpActions(state: ReadableState, p: PlayerId, head: SenateOp): Gam
 function senateRecruitActions(state: ReadableState, p: PlayerId): GameAction[] {
   const ag = state.agora!;
   const out: GameAction[] = [];
-  for (const c of allowedPlaceChambers(state, ag.politicianDistrict ?? undefined)) {
+  for (const c of allowedPlaceChambers(state, p, ag.politicianDistrict ?? undefined)) {
     out.push({ type: 'SENATE_PLACE', player: p, chamber: c });
   }
   for (const m of ownMovePairs(state, p)) {
@@ -1684,6 +1739,7 @@ function senateRecruitActions(state: ReadableState, p: PlayerId): GameAction[] {
 function resolveSenateOpsDone(state: GameState, p: PlayerId): void {
   const ag = state.agora;
   if (!ag) return;
+  dropStarvedPlaceOps(state);
   // 参议院小操作同样可能经由法令 / 军事推进即时定胜负。
   // 此时即使还有未用完的参议院行动，也必须立即结束对局——否则会留下
   // 「victory 已定、phase 仍为 playing」的不一致状态（legalActions 因 victory 返回空，
@@ -1735,9 +1791,12 @@ function applyRecruitSenator(
     return;
   }
 
-  // 密谋者：二选一（放 1 方块 或 Conspire）
+  // 密谋者：二选一（放 1 方块 或 Conspire）；方块用尽时只剩 Conspire
   ag.endTurnAfterOps = true;
-  pushAgoraStep(state, p, { kind: 'conspiratorChoose', options: ['place', 'conspire'] });
+  pushAgoraStep(state, p, {
+    kind: 'conspiratorChoose',
+    options: hasSpareCube(state, p) ? ['place', 'conspire'] : ['conspire'],
+  });
   if (hasActiveDecree(state, p, 'dec-conspire-extra')) {
     pushLog(state, p, '密谋再起：招募密谋者后立即再行动');
     state.extraTurn = true;
@@ -1763,8 +1822,9 @@ function applySenatePlace(
     if (!step.options.includes(String(action.chamber))) return;
     if (pend.player !== p) return;
     pend.steps.shift();
-    placeCube(state, p, action.chamber);
-    pushLog(state, p, `参议院：放置方块到第 ${action.chamber + 1} 议厅`);
+    if (placeCube(state, p, action.chamber)) {
+      pushLog(state, p, `参议院：放置方块到第 ${action.chamber + 1} 议厅`);
+    }
     afterAgoraChoice(state, p);
     return;
   }
@@ -1782,8 +1842,9 @@ function applySenatePlace(
     return;
   }
 
-  placeCube(state, p, action.chamber);
-  pushLog(state, p, `参议院：放置方块到第 ${action.chamber + 1} 议厅`);
+  if (placeCube(state, p, action.chamber)) {
+    pushLog(state, p, `参议院：放置方块到第 ${action.chamber + 1} 议厅`);
+  }
   resolveSenateOpsDone(state, p);
 }
 
@@ -1938,7 +1999,7 @@ function triggerConspiracyEffect(state: GameState, p: PlayerId, conspiracyId: st
   for (const op of def.ops) {
     switch (op.kind) {
       case 'place':
-        pushOp(state, p, { kind: 'place', district: 'any' });
+        pushPlaceOp(state, p, 'any');
         break;
       case 'move':
         pushOp(state, p, { kind: 'move' });
@@ -2126,7 +2187,7 @@ function applyChooseAgora(
       if (!step.options.includes(choice)) return;
       pend.steps.shift();
       if (choice === 'place') {
-        pushOp(state, p, { kind: 'place', district: 'any' });
+        pushPlaceOp(state, p, 'any');
         pushLog(state, p, '密谋者：放置 1 方块');
       } else if (choice === 'conspire') {
         const deck = ag.senate.conspiracyDeck;

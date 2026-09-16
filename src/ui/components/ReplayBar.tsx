@@ -99,7 +99,17 @@ export function ReplayBar({ replay }: { replay: ReplayApi }) {
         {!atEnd && (
           <div className="replay-next">
             下一步：{describeNext(nextAction)}
-            {nextAction ? `（${nextAction.player === 0 ? '玩家一' : '玩家二'}）` : ''}
+            {nextAction
+              ? `（${
+                  replay.solo
+                    ? nextAction.player === 0
+                      ? '你'
+                      : '领袖'
+                    : nextAction.player === 0
+                      ? '玩家一'
+                      : '玩家二'
+                }）`
+              : ''}
           </div>
         )}
         {atEnd && <div className="replay-next">已到终局。</div>}

@@ -1,8 +1,9 @@
 /* 7WD 真实浏览器点击流验证（puppeteer-core + 本机 Chrome）。
- * 用法：node scripts/browser/e2eClickFlow.cjs <hotseat|toggles|online> [outFile]
+ * 用法：node scripts/browser/e2eClickFlow.cjs <hotseat|toggles|online|solo> [outFile]
  *   hotseat   —— 本地热座整局（默认无扩展）
  *   toggles   —— 扩展开关真实鼠标点击断言 + agora 开启后对局推进
  *   online    —— 双窗口联机一局（两个独立 browser context：建房/加入/就绪/开始 → 整局 → 两端终局一致）
+ *   solo      —— 单人 Solo 整局 → 点「复盘本局」→ 进度条前/后跳 + 终局重现 + 退出复盘
  * 依赖：puppeteer-core（NODE_PATH 指向含 puppeteer-core 的 node_modules）+ 本机 Chrome。
  * 环境变量：GAME_URL（默认 http://localhost:8080）、CHROME_PATH（默认本机安装路径）、E2E_DIAG=1（输出诊断日志）。
  * 复用同目录 playHotseat.js / onlineStep.js 的页面注入片段。
@@ -47,6 +48,40 @@ async function launch() {
     headless: 'new',
     args: ['--no-sandbox', '--disable-dev-shm-usage'],
   });
+}
+
+/**
+ * 首页模式卡片：真实鼠标点击选中，返回选中态与该卡就地展开的参数文本。
+ * 走 elementHandle.click()（真鼠标事件）而非 el.click()，才能验证整张卡片的命中区。
+ */
+async function pickHomeCard(page, label) {
+  const ready = await page
+    .waitForFunction(() => !!document.querySelector('.home-grid .home-pick'), {
+      timeout: 8000,
+      polling: 200,
+    })
+    .then(() => true)
+    .catch(() => false);
+  if (!ready) return { found: false, clicked: false, selected: false, paramText: '' };
+  const handle = await page.evaluateHandle((want) => {
+    const btns = [...document.querySelectorAll('.home-grid .home-pick')];
+    return btns.find((b) => b.textContent.includes(want)) || null;
+  }, label);
+  const el = handle.asElement();
+  if (!el) return { found: true, clicked: false, selected: false, paramText: '' };
+  await el.click();
+  await sleep(150);
+  const state = await page.evaluate((want) => {
+    const card = document.querySelector('.home-card.on');
+    const param = card ? card.querySelector('.home-param') : null;
+    return {
+      clicked: true,
+      selected: !!card && card.textContent.includes(want),
+      paramText: param ? param.textContent.trim() : '',
+    };
+  }, label);
+  diag(`pickHomeCard ${label}: selected=${state.selected} param=${state.paramText.slice(0, 24)}`);
+  return { found: true, ...state };
 }
 
 /** 注入 scripts/browser 的 IIFE 片段并返回解析后的 JSON 结果。 */
@@ -112,6 +147,7 @@ async function runHotseat() {
   await page.setViewport({ width: 1280, height: 900 });
   await page.goto(URL, { waitUntil: 'networkidle2' });
   await armErrorTrap(page);
+  const home = await pickHomeCard(page, '本地热座');
   const began = await startGame(page);
 
   let out = null;
@@ -126,13 +162,18 @@ async function runHotseat() {
   }
 
   const errs = await page.evaluate(() => window.__errs || []);
+  const replay = out && out.finished && (out.winnerText || out.hasResult)
+    ? JSON.parse(await page.evaluate(fs.readFileSync(path.join(SNIPPET_DIR, 'replayUiCheck.js'), 'utf8')))
+    : { pass: false, notes: ['未到达可复盘的终局'] };
   const result = {
     phase: 'hotseat',
     began,
+    home,
     batches,
     ...out,
+    replay,
     pageErrors: errs.slice(0, 10),
-    pass: !!(began && out && out.finished && out.winnerText && (!errs.length)),
+    pass: !!(began && home && home.selected && out && out.finished && out.winnerText && replay.pass && !errs.length),
   };
   fs.writeFileSync(outFile, JSON.stringify(result, null, 2), 'utf8');
   console.log(result.pass ? 'HOTSEAT_PASS' : 'HOTSEAT_FAIL');
@@ -164,15 +205,6 @@ async function runToggles() {
         { timeout, polling: 200 },
         t,
         pattern.source,
-      )
-      .then(() => true)
-      .catch(() => false);
-  const waitSegOn = (label, timeout = 5000) =>
-    page
-      .waitForFunction(
-        (x) => [...document.querySelectorAll('.seg button')].some((b) => b.textContent.includes(x) && b.classList.contains('on')),
-        { timeout, polling: 200 },
-        label,
       )
       .then(() => true)
       .catch(() => false);
@@ -231,19 +263,45 @@ async function runToggles() {
     return !(await page.evaluate(anyVisible));
   };
 
-  // 0) 首屏应为「开始屏」（不自动开局）→ 切到本地热座 → 点「开始对局」→ 跳过首局奇迹选择
+  // 0) 首屏应为「首页模式选择屏」（不自动开局）→ 点「本地热座」卡片 → 点「开始对局」→ 跳过首局奇迹选择
   const noAutoStart = await page.evaluate(
     () => !document.querySelector('.track-cell') && !!document.querySelector('.start-panel .start-btn'),
   );
   diag('toggles: noAutoStart=' + noAutoStart);
   steps.push({ step: 'first paint is start screen (no auto-start)', ok: noAutoStart });
-  diag('toggles: switching to hotseat');
-  await page.evaluate(() => {
-    const hot = [...document.querySelectorAll('.seg button')].find((b) => b.textContent.includes('本地热座'));
-    hot && hot.click();
-  });
-  const switched = await waitSegOn('本地热座');
+  const homePick = await pickHomeCard(page, '本地热座');
+  const switched = homePick.selected;
   diag('toggles: switched=' + switched);
+
+  // 0b) 首页「开局设置」里的扩充开关：真实点击后摘要行应立即反映万神殿已开
+  const extHandle = await page.evaluateHandle(() => {
+    const btns = [...document.querySelectorAll('.home-ext .btn')];
+    return btns.find((b) => b.textContent.includes('万神殿')) || null;
+  });
+  const extEl = extHandle.asElement();
+  if (extEl) await extEl.click();
+  await sleep(200);
+  const homeExt = await page.evaluate(() => {
+    const p = document.querySelector('.start-panel .desc');
+    return { clicked: !!document.querySelector('.home-ext .btn.on'), summary: p ? p.textContent.trim() : '' };
+  });
+  diag(`toggles: homeExt clicked=${homeExt.clicked} summary=${homeExt.summary.slice(0, 40)}`);
+  steps.push({
+    step: 'home extension toggle (real click, summary updates)',
+    ok: homeExt.clicked && /万神殿/.test(homeExt.summary),
+    ...homeExt,
+  });
+  // 复位回「关」再开局：后续对局内的顶栏双向断言以「关」为起点
+  if (extEl) {
+    await extEl.click();
+    await sleep(200);
+  }
+  const homeExtOff = await page.evaluate(() => ({
+    on: !!document.querySelector('.home-ext .btn.on'),
+    summary: (document.querySelector('.start-panel .desc') || {}).textContent || '',
+  }));
+  steps.push({ step: 'home extension toggle back off', ok: !homeExtOff.on, ...homeExtOff });
+
   const began = await startGame(page);
   diag('toggles: began=' + began);
   steps.push({ step: 'start game (real click)', ok: began });
@@ -337,11 +395,17 @@ async function runOnline() {
   const diagA = (m) => diag('online/A: ' + m);
   const diagB = (m) => diag('online/B: ' + m);
 
+  /** 首页点「联机对战」卡片 → 直接进大厅（顶栏在首页是收起的，不能依赖它切模式） */
   const gotoOnline = async (page) => {
-    await page.evaluate(() => {
-      const btn = [...document.querySelectorAll('.seg button')].find((x) => x.textContent.includes('联机对战'));
-      btn && btn.click();
-    });
+    const pick = await pickHomeCard(page, '联机对战');
+    diag(`gotoOnline: found=${pick.found} clicked=${pick.clicked}`);
+    await page
+      .waitForFunction(() => !!document.querySelector('.room-actions, .conn-connected, .conn-disconnected'), {
+        timeout: 8000,
+        polling: 250,
+      })
+      .then(() => true)
+      .catch(() => false);
     await sleep(300);
   };
   const waitBodyMatch = (page, re, timeout) =>
@@ -481,12 +545,88 @@ async function runOnline() {
   return result.pass ? 0 : 1;
 }
 
+/* ---------------- 单人 Solo 整局 + 复盘 ---------------- */
+async function runSolo() {
+  const browser = await launch();
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1280, height: 900 });
+  await armErrorTrap(page);
+
+  /** 兜底重开：领袖回合僵死于 2026-09-16 已修（`actor` 改用 `activePlayer`），仍记录 stalls 以便复发时立刻可见 */
+  let out = null;
+  let stalls = 0;
+  let began = false;
+  let home = null;
+  let batches = 0;
+  const MAX_ATTEMPT = 3;
+  for (let attempt = 1; attempt <= MAX_ATTEMPT && !(out && out.finished); attempt++) {
+    await page.goto(URL, { waitUntil: 'networkidle2' });
+    // 新交互：先在首页点模式卡片（领袖选择器就地展开在该卡内），再点「开始对局」
+    if (!home) home = await pickHomeCard(page, '单人 Solo');
+    began = (await startGame(page)) || began;
+    if (!began) break;
+    let stuck = 0;
+    let lastSteps = -1;
+    await page.evaluate(() => {
+      delete window.__out;
+    });
+    while (batches < attempt * 80) {
+      out = await evalSnippet(page, 'playSolo.js', 40);
+      batches++;
+      if (out.finished) break;
+      if (out.errors && out.errors.length) break;
+      // 「一批下去玩家一步都没走」= 页面停在无法操作的画面
+      stuck = out.steps > lastSteps ? 0 : stuck + 1;
+      lastSteps = out.steps;
+      if (stuck >= 4) {
+        stalls++;
+        console.log(`SOLO_STALL attempt=${attempt} steps=${out.steps} leaderBusy=${out.leaderBusy}`);
+        break;
+      }
+      await sleep(150);
+    }
+  }
+
+  const replay = out && out.finished && out.hasReplayBtn
+    ? JSON.parse(await page.evaluate(fs.readFileSync(path.join(SNIPPET_DIR, 'replayUiCheck.js'), 'utf8')))
+    : { pass: false, notes: ['未到达可复盘的终局'] };
+
+  const errs = await page.evaluate(() => window.__errs || []);
+  const result = {
+    phase: 'solo',
+    began,
+    home,
+    batches,
+    stalls,
+    ...out,
+    replay,
+    pageErrors: errs.slice(0, 10),
+    pass: !!(
+      began &&
+      home &&
+      home.selected &&
+      home.paramText.includes('对手领袖') &&
+      out &&
+      out.finished &&
+      out.hasReplayBtn &&
+      replay &&
+      replay.pass &&
+      !errs.length
+    ),
+  };
+  fs.writeFileSync(outFile, JSON.stringify(result, null, 2), 'utf8');
+  console.log(result.pass ? 'SOLO_PASS' : 'SOLO_FAIL');
+  await browser.close();
+  return result.pass ? 0 : 1;
+}
+
 (async () => {
   try {
     diag('entering dispatcher');
     if (phase === 'hotseat') process.exit(await runHotseat());
     else if (phase === 'toggles') process.exit(await runToggles());
     else if (phase === 'online') process.exit(await runOnline());
+    else if (phase === 'solo') process.exit(await runSolo());
     else { console.error('unknown phase'); process.exit(2); }
   } catch (e) {
     diag('FATAL: ' + e.message + ' | ' + String(e.stack).split('\n')[1]);

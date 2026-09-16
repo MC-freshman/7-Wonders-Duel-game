@@ -74,17 +74,39 @@ function hashStr(s: string): number {
   return h >>> 0;
 }
 
+/**
+ * solo 随机流的派生种子。
+ *
+ * 复盘要还原某一局，必须用**与实况完全相同的入参**建局：
+ * 随机开局传 undefined、指定领袖传该领袖 id —— 见 `replay.ts` 的 `SoloReplayMeta.leaderRandom`。
+ */
+const soloRngSeed = (seed: number, leaderId?: string) =>
+  (seed ^ 0x504e509 ^ (leaderId ? hashStr(leaderId) : 0)) >>> 0;
+
+/** 当前扩展组合下的可选领袖池（与 createSoloGame 完全一致） */
+function leaderPoolFor(opts: SoloOptions): SoloLeaderDef[] {
+  let leaders: SoloLeaderDef[] = SOLO_LEADERS;
+  if (opts.pantheon) leaders = soloPantheonLeaders(leaders);
+  if (opts.agora) leaders = soloAgoraLeaders(leaders);
+  return leaders;
+}
+
+/** 解析本局领袖（随机抽取时消耗一次 `rng.int`）。只能在建局时调用一次。 */
+function resolveSoloLeader(
+  rng: Rng,
+  pool: SoloLeaderDef[],
+  leaderId?: string,
+): SoloLeaderDef {
+  return (leaderId && pool.find((l) => l.id === leaderId)) || pool[rng.int(pool.length)];
+}
+
 export function createSoloGame(seed: number, leaderId?: string, opts: SoloOptions = {}): SoloGame {
   const agora = opts.agora === true;
   const pantheon = opts.pantheon === true;
-  const rng = makeRng((seed ^ 0x504e509 ^ (leaderId ? hashStr(leaderId) : 0)) >>> 0);
+  const rng = makeRng(soloRngSeed(seed, leaderId));
 
   // 领袖候选池：base 5 → Pantheon +3 → Agora +1（组合时 9 位，见 SOLO_PANTHEON_DATA §4）
-  let leaders = SOLO_LEADERS;
-  if (pantheon) leaders = soloPantheonLeaders(leaders);
-  if (agora) leaders = soloAgoraLeaders(leaders);
-  const leader: SoloLeaderDef =
-    (leaderId && leaders.find((l) => l.id === leaderId)) || leaders[rng.int(leaders.length)];
+  const leader = resolveSoloLeader(rng, leaderPoolFor(opts), leaderId);
 
   // 决策牌堆：三类互斥（无图标 / Agora 图标 / Pantheon 图标），组合恒为 12 张
   const decisionCards =
@@ -158,6 +180,7 @@ export function createSoloGame(seed: number, leaderId?: string, opts: SoloOption
     decisionHistory: [],
     agora,
     pantheon,
+    leaderRandom: leaderId == null,
   };
   // Agora：预建 Curia Julia 的「开局立即触发 1 张密谋」顺延到领袖首个回合开始时结算
   if (preTriggers.length) (game as SoloGame & { preTrigger?: string[] }).preTrigger = preTriggers;
@@ -376,6 +399,40 @@ export function soloApplyAction(game: SoloGame, action: GameAction): void {
   }
 
   afterLeaderInvoke(game, invokedBefore);
+}
+
+/* ------------------------------ 回合驱动权 ------------------------------ */
+
+/**
+ * 当前是否轮到领袖行动（含领袖的各类待决）。
+ *
+ * ⚠️ 实况驱动（`useSoloGame`）与复盘重放（`replay.ts` 的 `createSoloRunner`）**必须共用**
+ * 这个判定：领袖回合会消耗 solo 随机流（重洗决策牌堆、`rng.pick` 选发展标记等），
+ * 而这些消耗不写进动作日志。只要两侧调用 `soloLeaderTurn` 的时机有任何差异，
+ * 随机流就会分叉、复盘画面与实况不再一致。修改本函数等于同时改两条链路。
+ */
+export function leaderMustAct(g: SoloGame): boolean {
+  const st = g.state;
+  if (st.victory || st.phase === 'gameOver') return false;
+  if (isLeaderAgoraPending(g) || isLeaderPantheonPending(g)) return true;
+  if (st.pending) {
+    const actor = st.pending.kind === 'startPlayer' ? st.pending.chooser : st.pending.player;
+    return actor === g.leaderId;
+  }
+  return st.current === g.leaderId && (st.phase === 'playing' || st.phase === 'wonderDraft');
+}
+
+/**
+ * 是否正等**玩家**处理一个待决（如建造触发科技对子后要选发展标记）。
+ *
+ * 玩家的一手可能拆成多条动作（建造 → 解析待决），此期间领袖不得插队。
+ * 实况驱动与复盘重放必须同样处理，否则时间线会分叉。
+ */
+export function waitsForPlayerPending(g: SoloGame): boolean {
+  const st = g.state;
+  if (!st.pending || st.victory || st.phase === 'gameOver') return false;
+  const actor = st.pending.kind === 'startPlayer' ? st.pending.chooser : st.pending.player;
+  return actor !== g.leaderId;
 }
 
 /* --------------------- Pantheon：调用神明后的领袖化结算 --------------------- */

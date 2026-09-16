@@ -370,9 +370,42 @@ if (finished.victory) {
   ]);
 }
 
+/* Solo 复盘：源带 solo 元数据 → 复盘器交替重演领袖回合，并渲染只读 SoloBar */
+const soloReplayHtml = renderToString(
+  createElement(ReplayView, {
+    source: {
+      seed: 20260910,
+      log: [...soloGame.state.log],
+      options: { pantheon: true },
+      solo: {
+        leaderId: soloGame.leaderId,
+        leader: soloGame.leader.id,
+        leaderRandom: soloGame.leaderRandom === true,
+      },
+      names: ['你', soloGame.leader.zh],
+    },
+    onExit: noop,
+  }),
+);
+parts.push(['Solo 复盘视图', soloReplayHtml]);
+/* 首页模式选择屏：四张卡片都在、默认选中「人机对战」、且仍未建局（无牌阵） */
+const homeKeys = ['home-grid', 'home-pick', '人机对战', '本地热座', '联机对战', '单人 Solo', 'home-card on', '开始对局'];
+const homeMissing = homeKeys.filter((k) => !first.includes(k));
+const homeOk = homeMissing.length === 0 && !first.includes('track-cell');
+if (!homeOk) console.log('  首页缺项：', homeMissing.join(' / '), '| 意外出现牌阵：', first.includes('track-cell'));
+console.log(`${homeOk ? '✓' : '✗'} 首页模式选择屏（四张卡片 + 默认选中人机 + 未建局）`);
+
+const soloReplayOk =
+  soloReplayHtml.includes('solo-bar') &&
+  soloReplayHtml.includes('单人 Solo 复盘') &&
+  !soloReplayHtml.includes('solo-pick'); // 只读态不得出现领袖选择器
+console.log(`${soloReplayOk ? '✓' : '✗'} Solo 复盘顶条为只读（有 solo-bar、无领袖选择器）`);
+
 /* 首屏是「开始屏」：本地模式不再自动开局，故此时不应有牌阵（track-cell）。
    牌阵本身由下面的「牌阵」用例单独覆盖。 */
 let ok =
+  homeOk &&
+  soloReplayOk &&
   first.includes('七大奇迹对决') &&
   first.includes('开始对局') &&
   !first.includes('track-cell');

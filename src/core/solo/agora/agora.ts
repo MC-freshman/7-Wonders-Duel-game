@@ -11,7 +11,7 @@
  *  - 只读地挑选动作，实际执行统一交给主引擎 applyAction（零侵入）。
  * ------------------------------------------------------------------ */
 
-import { adjacentChambers, districtOf } from '../../data/agora';
+import { SENATE_CUBE_SUPPLY, adjacentChambers, districtOf } from '../../data/agora';
 import type { GameAction, GameState, PlayerId } from '../../types';
 import type { Rng } from '../../rng';
 import type { SoloDirection } from '../types';
@@ -26,7 +26,8 @@ export interface AgoraCtx {
 
 /* --------------------------- 基础读数 --------------------------- */
 
-const TOTAL_CUBES = 12;
+/** 供给上限取自 data 层（引擎的放置校验用同一个数，避免两处各写一份 12） */
+const TOTAL_CUBES = SENATE_CUBE_SUPPLY;
 
 function foeOf(me: PlayerId): PlayerId {
   return (me === 0 ? 1 : 0) as PlayerId;

@@ -18,6 +18,7 @@ import {
   type SoloLeaderDef,
 } from '../core/solo/index';
 import { CardStructure } from './components/CardStructure';
+import { HomeScreen } from './components/HomeScreen';
 import { MilitaryTrack } from './components/MilitaryTrack';
 import { PantheonBar } from './components/PantheonBar';
 import { SenateBar } from './components/SenateBar';
@@ -30,13 +31,6 @@ import { useIsNarrow } from './useMediaQuery';
 
 const NAMES: [string, string] = ['玩家一', '玩家二'];
 const DIFFS: Difficulty[] = ['easy', 'medium', 'hard'];
-
-const MODE_LABEL: Record<GameMode, string> = {
-  ai: '人机对战',
-  hotseat: '本地热座',
-  online: '联机对战',
-  solo: '单人 Solo',
-};
 
 type Dir = 'left' | 'right' | 'up' | 'down';
 
@@ -351,13 +345,9 @@ export default function App() {
     return <ReplayView source={replaySource} onExit={() => setReplaySource(null)} />;
   }
 
-  /* 开始屏：本地三种模式（人机 / 热座 / Solo）首屏停在这里，点「开始对局」才进对局。
-     联机不经过这里 —— 它有自己更完整的大厅流程。 */
+  /* 首页模式选择屏：本地三种模式（人机 / 热座 / Solo）首屏停在这里，点「开始对局」才建局。
+     「联机对战」卡片直接切到大厅 —— 它有自己更完整的就绪 / 开始流程，不经这里。 */
   if (!started && !isOnline) {
-    const exts = [
-      pantheonOn ? '🏛 万神殿开' : null,
-      agoraOn ? '🏛 市政广场开' : null,
-    ].filter(Boolean);
     return (
       <div className="app">
         <TopBar
@@ -373,38 +363,26 @@ export default function App() {
           setAgora={setAgoraOn}
           tag="未开局"
           onRestart={() => undefined}
+          compact
         />
-        <div className="lobby">
-          <div className="panel start-panel">
-            <h3>准备开始</h3>
-            <p className="desc">
-              当前模式：<strong>{MODE_LABEL[mode]}</strong>
-              {mode === 'ai' ? `　难度：${DIFFICULTY_LABEL[difficulty]}` : null}
-              {exts.length > 0 ? `　·　${exts.join('　·　')}` : '　·　无扩展'}
-            </p>
-            <button
-              className="btn primary start-btn"
-              onClick={() => {
-                sfx.unlock();
-                sfx.play('click');
-                setStarted(true);
-              }}
-            >
-              开始对局
-            </button>
-            <p className="desc">
-              可在顶栏切换模式 / 难度 / 扩展，设好后点「开始对局」。
-            </p>
-          </div>
-          <div className="panel">
-            <h3>怎么玩</h3>
-            <ol className="howto">
-              <li>点击一张高亮的牌，再选「建造建筑 / 弃牌换金币 / 建造奇迹」。</li>
-              <li>也可以用方向键走位、Enter 选定，W 展开奇迹面板，Esc 取消。</li>
-              <li>顶栏的 🏛 开关可自由组合万神殿与市政广场，切换即按新设置重开一局。</li>
-            </ol>
-          </div>
-        </div>
+        <HomeScreen
+          mode={mode}
+          setMode={setMode}
+          difficulty={difficulty}
+          setDifficulty={setDifficulty}
+          pantheon={pantheonOn}
+          setPantheon={setPantheonOn}
+          agora={agoraOn}
+          setAgora={setAgoraOn}
+          leaderPool={soloLeaderPool}
+          leaderId={soloLeaderId}
+          setLeaderId={setSoloLeaderId}
+          onStart={() => {
+            sfx.unlock();
+            sfx.play('click');
+            setStarted(true);
+          }}
+        />
       </div>
     );
   }
@@ -780,6 +758,8 @@ function TopBar(props: {
   pantheonTitle?: string;
   tag: string;
   onRestart: () => void;
+  /** 首页模式选择屏：模式 / 难度 / 扩展已在卡片里选，顶栏只留标题与音效 */
+  compact?: boolean;
 }) {
   const {
     mode,
@@ -796,12 +776,11 @@ function TopBar(props: {
     pantheonTitle,
     tag,
     onRestart,
+    compact = false,
   } = props;
-  return (
-    <div className="topbar">
-      <h1>七大奇迹对决</h1>
-      <span className="age-tag">{tag}</span>
-      <div className="spacer" />
+  /* 模式 / 难度 / 扩展这组控件在首页由卡片承担，故 compact 时整体收起 */
+  const controls = (
+    <>
       <div className="seg">
         <button className={mode === 'ai' ? 'on' : ''} onClick={() => setMode('ai')}>
           人机对战
@@ -844,12 +823,23 @@ function TopBar(props: {
       >
         🏛 市政广场{agora ? '开' : '关'}
       </button>
+    </>
+  );
+
+  return (
+    <div className="topbar">
+      <h1>七大奇迹对决</h1>
+      <span className="age-tag">{tag}</span>
+      <div className="spacer" />
+      {compact ? null : controls}
       <button className="btn" onClick={toggleMute} title="音效开关">
         {muted ? '🔇 音效关' : '🔊 音效开'}
       </button>
-      <button className="btn" onClick={onRestart}>
-        新对局
-      </button>
+      {compact ? null : (
+        <button className="btn" onClick={onRestart}>
+          新对局
+        </button>
+      )}
     </div>
   );
 }

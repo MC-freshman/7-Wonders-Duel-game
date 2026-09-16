@@ -902,6 +902,143 @@ button:disabled {
   font-weight: 600;
 }
 
+/* ------------------------------ 首页模式选择屏 ------------------------------ */
+
+.home {
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: 10px;
+  align-items: stretch;
+  margin-bottom: 12px;
+}
+
+.home-card {
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 2px;
+  transition:
+    border-color var(--dur-fast) var(--ease),
+    background var(--dur-fast) var(--ease);
+}
+
+.home-card.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* 整张卡片即命中区；参数区在按钮之外，避免出现「按钮套按钮」 */
+.home-pick {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  width: 100%;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  padding: 10px;
+  text-align: left;
+  color: inherit;
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.home-pick:hover:not(:disabled) {
+  background: rgba(176, 125, 58, 0.08);
+}
+
+.home-pick:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+.home-glyph {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.home-card-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.home-card-desc {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.home-card-note {
+  margin-top: auto;
+  padding-top: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.home-param {
+  border-top: 1px dashed var(--line);
+  margin: 2px 4px 4px;
+  padding-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--muted);
+  animation: fadeIn var(--dur-base) var(--ease);
+}
+
+.home-pick-leader {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.home-pick-leader select {
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.home-ext {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.home-ext-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+@media (max-width: 767px) {
+  .home-grid {
+    grid-template-columns: repeat(auto-fit, minmax(146px, 1fr));
+    gap: 8px;
+  }
+  .home-card-title {
+    font-size: 13px;
+  }
+  .home-pick {
+    padding: 8px;
+  }
+}
+
 .room-actions {
   display: flex;
   flex-direction: column;
@@ -1252,7 +1389,8 @@ button:disabled {
 /* 触屏没有 hover，给可点元素补一个按下反馈 */
 @media (hover: none) {
   .card.selectable:active,
-  .option:active {
+  .option:active,
+  .home-pick:active {
     opacity: 0.75;
   }
 }

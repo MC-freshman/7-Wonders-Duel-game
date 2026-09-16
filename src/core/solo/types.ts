@@ -85,4 +85,9 @@ export interface SoloGame {
   agora?: boolean;
   /** M8-P：是否启用 Pantheon 扩展（可与 agora 同时为 true） */
   pantheon?: boolean;
+  /**
+   * 本局领袖是否由随机抽取决定（`createSoloGame` 未收到 leaderId）。
+   * 复盘必须用同一入参重建（随机↔undefined、指定↔id），否则 solo 随机流不同。
+   */
+  leaderRandom?: boolean;
 }
