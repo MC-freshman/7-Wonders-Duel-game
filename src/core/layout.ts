@@ -1,5 +1,5 @@
 import type { Slot } from './types';
-import { AGE_LAYOUTS } from './data/layouts';
+import { AGE_LAYOUTS, AGORA_AGE_LAYOUTS } from './data/layouts';
 
 /* ------------------------------------------------------------------
  * 牌阵解析
@@ -22,8 +22,9 @@ export interface LayoutSlot {
   requires: number[];
 }
 
-export function parseLayout(age: 1 | 2 | 3): LayoutSlot[] {
-  const lines = AGE_LAYOUTS[age].split('\n');
+export function parseLayout(age: 1 | 2 | 3, agora = false): LayoutSlot[] {
+  const src = (agora ? AGORA_AGE_LAYOUTS : AGE_LAYOUTS)[age];
+  const lines = src.split('\n');
   const slots: LayoutSlot[] = [];
   let prev: Map<number, number> = new Map(); // 字符位置 -> 卡位索引
   let cardIndex = 0;
@@ -52,8 +53,8 @@ export function parseLayout(age: 1 | 2 | 3): LayoutSlot[] {
   return slots;
 }
 
-export function buildSlots(age: 1 | 2 | 3): Slot[] {
-  return parseLayout(age).map((s) => ({
+export function buildSlots(age: 1 | 2 | 3, agora = false): Slot[] {
+  return parseLayout(age, agora).map((s) => ({
     index: s.index,
     cardId: null,
     faceUp: !s.faceDown,

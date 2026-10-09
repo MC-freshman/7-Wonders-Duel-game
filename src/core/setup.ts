@@ -161,9 +161,10 @@ export function initialState(seed: number, opts: GameStateOptions = {}): GameSta
 /** 为指定时代铺牌阵；就地修改传入的 state */
 export function setupAge(state: GameState, age: 1 | 2 | 3, rng: Rng): void {
   const deck = AGE_CARDS(age).map((c) => c.id);
-  // Agora：参议员混入牌堆（I:5 / II:5 / III:3），等量基础卡额外移出以保持牌阵规模
+  // 官方 Agora setup：每时代照基础规则移除 3 张，再加入参议员
+  // （I:5 / II:5 / III:3），用官方加大牌阵（25/25/23 格）正好填满。
   const nSenators = state.agora ? SENATOR_AGE_MIX[age] : 0;
-  const removed = rng.sample(deck, 3 + nSenators);
+  const removed = rng.sample(deck, 3);
   let ids = deck.filter((id) => !removed.includes(id));
   state.removedFromGame.push(...removed);
   if (state.agora) {
@@ -192,7 +193,7 @@ export function setupAge(state: GameState, age: 1 | 2 | 3, rng: Rng): void {
   }
 
   ids = rng.shuffle(ids);
-  const slots = buildSlots(age);
+  const slots = buildSlots(age, !!state.agora);
   slots.forEach((s, i) => {
     s.cardId = ids[i] ?? null;
   });

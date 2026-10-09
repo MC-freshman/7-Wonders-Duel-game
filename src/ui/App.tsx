@@ -4,6 +4,7 @@ import { costPlanForCard, costPlanForWonder, legalActions } from '../core/engine
 import { CARD_BY_ID, WONDER_BY_ID } from '../core/data/index';
 import { RESOURCE_LABEL } from '../core/types';
 import type { GameAction, PlayerId, Resource } from '../core/types';
+import type { PublicState } from '../core/visibility';
 import { DIFFICULTY_LABEL, type Difficulty } from '../ai/index';
 import type { ReplaySource } from '../core/replay';
 import { sfx } from './audio';
@@ -70,10 +71,24 @@ function moveFocus(
   return best >= 0 ? best : current;
 }
 
-/** 弃牌收益 = 2 + 自己城中商业（黄）卡数量 */
-function discardGain(view: { players: { city: string[] }[] }, p: PlayerId): number {
+/** 弃牌收益 = 2 + 自己城中商业（黄）卡数量；Agora 法令「弃牌补贴」被控制时再 +2（与引擎 applyDiscard 同口径） */
+function discardGain(view: PublicState, p: PlayerId): number {
   const yellow = view.players[p].city.filter((id) => CARD_BY_ID[id]?.type === 'commercial').length;
-  return 2 + yellow;
+  let gain = 2 + yellow;
+  const ag = view.agora;
+  if (ag) {
+    for (const ch of ag.senate.chambers) {
+      const active = [
+        ...(ch.decree && ch.decreeFaceUp ? [ch.decree] : []),
+        ...ch.decreeExtra.filter((e) => e.faceUp).map((e) => e.id),
+      ];
+      if (active.includes('dec-discard-coin2') && ch.controller === p) {
+        gain += 2;
+        break;
+      }
+    }
+  }
+  return gain;
 }
 
 export default function App() {

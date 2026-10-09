@@ -202,6 +202,8 @@ export function planCost(state: ReadableState, p: PlayerId, input: CostInput): C
     coinCost,
     total,
     freeByLink: false,
-    affordable: player.coins >= total,
+    // Astarte 圣库金币可正常花费（engine.payCoins 会优先扣它），必须计入可负担判断；
+    // 否则 Pantheon 局中「手头金币不足但圣库充足」时建造动作会凭空消失
+    affordable: player.coins + (state.pantheon ? player.pan.astarteCoins : 0) >= total,
   };
 }

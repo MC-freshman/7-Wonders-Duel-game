@@ -1,4 +1,4 @@
-import type { GameState, PlayerId, Slot } from './types';
+import type { GameAction, GameState, LogEntry, PlayerId, Slot } from './types';
 
 /* ------------------------------------------------------------------
  * 状态投影：把「完整对局状态」裁剪为「可以安全下发 / 安全渲染」的公开状态
@@ -41,6 +41,32 @@ export function redactSlot(slot: Slot): PublicSlot {
   return slot.faceUp ? slot : { ...slot, cardId: null };
 }
 
+/**
+ * 对局中下发的日志动作需要掩去的私密字段。
+ *
+ * 日志的 `action` 会随 publicView / UPDATE.entries 原样下发，其中：
+ *   - PREPARE_CONSPIRACY.conspiracyId      —— 密谋身份（触发前保密）
+ *   - CHOOSE_AGORA.choice                  —— 可能是密谋 id（conspireKeep 抽 2 留 1）
+ *   - PLACE_DIVINITY.divinityId            —— 面朝下放到图板的神格身份
+ * 终局 OVER 会附带**完整**日志（此时已无秘密），复盘重放不受掩码影响。
+ */
+export function maskSecretLogAction<T extends GameAction>(action: T): T {
+  switch (action.type) {
+    case 'PREPARE_CONSPIRACY':
+      return { ...action, conspiracyId: '#' };
+    case 'CHOOSE_AGORA':
+      return { ...action, choice: '#' };
+    case 'PLACE_DIVINITY':
+      return { ...action, divinityId: '#' };
+    default:
+      return action;
+  }
+}
+
+function maskLog(log: LogEntry[]): LogEntry[] {
+  return log.map((e) => (e.action ? { ...e, action: maskSecretLogAction(e.action) } : e));
+}
+
 export function publicView(state: GameState, viewer: PlayerId | null = null): PublicState {
   const { seed, rngState, removedFromGame, progressRemoved, ...rest } = state;
   void seed;
@@ -52,6 +78,12 @@ export function publicView(state: GameState, viewer: PlayerId | null = null): Pu
     ...rest,
     viewer,
     slots: rest.slots.map(redactSlot),
+    // 垫在奇迹下的时代卡身份永久保密（见头注释）；UI 不消费该字段
+    players: rest.players.map((pl) => ({
+      ...pl,
+      wonderCards: Object.fromEntries(Object.keys(pl.wonderCards).map((k) => [k, '#'])),
+    })) as typeof view.players,
+    log: maskLog(rest.log),
   };
 
   const pan = state.pantheon;
@@ -200,6 +232,20 @@ export function isSecretLeaked(view: PublicState): string[] {
       });
     }
   }
+  // 垫在奇迹下的时代卡身份不得出现在公开视图
+  for (const [i, pl] of view.players.entries()) {
+    for (const [wid, cid] of Object.entries(pl.wonderCards)) {
+      if (cid !== '#') leaks.push(`players[${i}].wonderCards[${wid}]`);
+    }
+  }
+  // 对局中下发的日志动作不得携带私密字段（终局 OVER 的完整日志不走本断言）
+  view.log.forEach((e, i) => {
+    const a = e.action;
+    if (!a) return;
+    if (a.type === 'PREPARE_CONSPIRACY' && a.conspiracyId !== '#') leaks.push(`log[${i}].action.conspiracyId`);
+    if (a.type === 'CHOOSE_AGORA' && a.choice !== '#') leaks.push(`log[${i}].action.choice`);
+    if (a.type === 'PLACE_DIVINITY' && a.divinityId !== '#') leaks.push(`log[${i}].action.divinityId`);
+  });
   return leaks;
 }
 

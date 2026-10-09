@@ -204,3 +204,24 @@ npm run replay:solo -- 4           # ⭐ Solo 复盘逐帧校验（四形态 × 
 npm run browser:e2e -- solo <out.json>  # 浏览器：Solo 整局 → 复盘本局 → 拖进度 → 退出（需 puppeteer-core）
 # 第二个参数可用 easy|medium|hard 指定玩家 AI 难度
 ```
+
+## 回归实测（2026-10-07，官方规则核对轮：Agora 牌阵修正 + 三项工作包落地）
+
+> 授权：用户指示「按照你能做的给出方案，然后执行，尽可能补全」。核对底本：官方 Agora
+> 英文规则书 PDF（Asmodee CDN，20 页）。明细见 `docs/rules/AGORA_DATA.md` §8。
+
+| 项 | 结果 |
+|---|---|
+| **Agora 牌阵改用官方加大布局**（25/25/23 格，setup 改回每时代移 3 张 + 加参议员） | ✅ `check` 含 Agora 拓扑断言全过；基础局 rng 流逐位不变（base sim 40 统计与改前一致） |
+| **「取回移除卡」类密谋改累计制**（Age≤N，排除行会/神殿） | ✅ |
+| **Astarte 圣库计入建造可负担**（resources.ts）+ `check:astarte` 回归（红绿自证） | ✅ |
+| **publicView 掩码 wonderCards + 日志动作私密字段**（密谋 id / 面朝下神格），`OVER` 附完整日志供联机复盘 | ✅ `proto` 四变体每帧泄漏断言全过 |
+| **AI 全难度确定化**（不再借搜索偷看暗牌） | ✅ bench：easy/medium vs 随机不变；medium 24 局 79%（公平性成本，如实记录） |
+| **engine `applyAction` try/finally 防跨调用日志污染** | ✅ replay 三变体逐帧一致 |
+| **AI 线程化**：浏览器 Web Worker（useLocalGame 异步出招，超时/失败回落同步）+ 服务器 `worker_threads`（room.aiStep 异步，esbuild 双入口产物） | ✅ `proto:ai` 3/3（worker 池日志确认启用）；`server:build`+`proto:prod` 2/2；真机 Chrome 探针 AI_WORKER_PASS（整局推进、主线程最大延迟 11.7ms、0 页面错误） |
+| **sameAction 结构化比较 / ws 缓冲与房间上限 / resumeSeat 清理 / 弃牌标签含法令 / 文档数字对齐** | ✅ |
+| pm2（ecosystem.config.cjs）启停 + restart + 清理 | ✅ HTTP 200 两轮（N5 的 pm2 面收口）；Docker 本机未装，N5 的 docker 面仍待环境 |
+| 全量回归 | ✅ `check` / `check:senate` / `check:astarte` / sim×4（base 逐位不变、agora 114 步均值）/ replay×3 / replay:solo 727 帧 / solo 仿真×4 / smoke / proto×4 / build+perf / 浏览器 e2e 四相 |
+
+遗留（与此前一致）：N4 真机清单执行、N5 Docker 构建（本机无 docker）、M12 政治家分区
+分布与 chamber 符号映射（等实体扫描，详见 AGORA_DATA.md §8）、官方变体规则。

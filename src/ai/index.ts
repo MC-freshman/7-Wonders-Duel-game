@@ -9,8 +9,8 @@ import type { GameAction, GameState, PlayerId, ScienceSymbol } from '../core/typ
  * AI 对手
  *
  * 决策输入：完整 GameState。其中「牌阵中正面朝下的牌」与「开局被移除的牌」
- * 属于隐藏信息 —— 困难难度会先做一次「确定化」采样（把暗牌随机替换成
- * 未知牌池中的牌）再搜索，避免 AI 直接偷看暗牌。
+ * 属于隐藏信息 —— 搜索前会先做「确定化」采样（把暗牌随机替换成
+ * 未知牌池中的牌）再搜索，避免 AI 直接偷看暗牌（hard 再多次采样取平均）。
  *
  * 评估函数考虑：即时分数、军事位置、科技进度（含压制威胁）、资源自给率、
  * 金币、连锁潜力、奇迹可行性、以及对手的即时威胁。
@@ -347,9 +347,11 @@ export function chooseAction(
   const totals = new Map<number, number>();
   let expired = false;
 
-  // 困难难度会对暗牌做多次采样再取平均，避免为「幻想中的牌面」过度优化
+  // 所有难度都先对暗牌做确定化采样：搜索会在假想线里翻开暗牌并据此评估，
+  // 直接用真实状态等于偷看（hard 之外曾未确定化，medium 借此获得不公平优势）；
+  // hard 的多次采样再取平均，避免为「幻想中的牌面」过度优化
   for (let s = 0; s < cfg.samples; s++) {
-    const base = cfg.samples > 1 ? determinize(state, rng) : state;
+    const base = determinize(state, rng);
     for (let i = 0; i < actions.length; i++) {
       const next = applyAction(base, actions[i]);
       const { score } = search(next, me, cfg.depth - 1, -Infinity, Infinity, counter);

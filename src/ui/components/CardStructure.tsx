@@ -119,7 +119,9 @@ export function CardStructure({
       </h3>
       <div className={`structure-wrap${zoomed ? ' zoomed' : ''}`} ref={wrapRef}>
         {live.length === 0 ? (
-          <div className="empty">本时代牌已取完</div>
+          <div className="empty">
+            {state.phase === 'wonderDraft' ? '奇迹选择完成后显示牌阵' : '本时代牌已取完'}
+          </div>
         ) : (
           <div
             className="structure-stage"

@@ -53,6 +53,8 @@ const MIME: Record<string, string> = {
 };
 
 const rooms = new Map<string, Room>();
+/** 房间总数上限：单进程内存态，恶意连接不得无限制建房（设计文档 §4 自述按 200 房设计） */
+const MAX_ROOMS = 500;
 
 function send(ws: MiniSocket, msg: ServerMsg): void {
   if (ws.readyState === 1) ws.send(JSON.stringify(msg));
@@ -83,11 +85,12 @@ function broadcastRoom(room: Room): void {
 }
 
 /**
- * 终局消息：附带 seed，让双方都能在本地复盘重放这一局。
- * 只有对局已结束时才会发送，此时牌面与移除的牌都已无保密价值。
+ * 终局消息：附带 seed 与完整日志，让双方都能在本地复盘重放这一局。
+ * 只有对局已结束时才会发送，此时牌面与移除的牌都已无保密价值；
+ * 对局中的 UPDATE 日志对私密字段做了掩码，复盘必须用这里的完整日志。
  */
 function overMsg(state: NonNullable<Room['state']>): ServerMsg {
-  return { t: 'OVER', victory: state.victory!, seed: state.seed };
+  return { t: 'OVER', victory: state.victory!, seed: state.seed, log: state.log };
 }
 
 function roomOf(ws: MiniSocket): Room | null {
@@ -116,6 +119,10 @@ function handle(ws: MiniSocket, raw: string): void {
   const room = roomOf(ws);
 
   if (msg.t === 'ROOM_CREATE') {
+    if (rooms.size >= MAX_ROOMS) {
+      send(ws, { t: 'ERROR', reason: '服务器房间数已达上限，请稍后再试' });
+      return;
+    }
     if (room) leaveRoom(room, room.seatOf(ws)!);
     let code = makeRoomCode();
     while (rooms.has(code)) code = makeRoomCode();
@@ -418,25 +425,29 @@ setInterval(() => {
 
 /**
  * AI 托管心跳：当前行动方若已被 AI 接管，就在这里代其出招。
- * 间隔 AI_STEP_MS（默认 700ms），既让对手看清 AI 做了什么，
- * 也远低于每秒 40 次的动作限流。
+ * 间隔 AI_STEP_MS（默认 700ms）。决策在 worker 线程计算（不可用时同步回落），
+ * 完成后再广播——主线程事件循环不再被 hard 档搜索阻塞。
  */
 setInterval(() => {
   for (const room of rooms.values()) {
     if (!room.started || room.state?.victory) continue;
     const before = room.state?.log.length ?? 0;
-    if (!room.aiStep()) continue;
-
-    const view = room.state!;
-    if (view.log.length === before) {
-      broadcast(room, { t: 'UPDATE', view: publicView(view, null), logFrom: view.log.length, entries: [], lastAction: null });
-    } else {
-      broadcastUpdate(room);
-    }
-    if (view.victory) {
-      broadcast(room, overMsg(view));
-      console.log(`[房间] ${room.code} AI 托管对局已结束`);
-    }
+    void room
+      .aiStep()
+      .then((progressed) => {
+        if (!progressed) return;
+        const view = room.state!;
+        if (view.log.length === before) {
+          broadcast(room, { t: 'UPDATE', view: publicView(view, null), logFrom: view.log.length, entries: [], lastAction: null });
+        } else {
+          broadcastUpdate(room);
+        }
+        if (view.victory) {
+          broadcast(room, overMsg(view));
+          console.log(`[房间] ${room.code} AI 托管对局已结束`);
+        }
+      })
+      .catch(() => { /* aiStep 内部已兜底，不应到达 */ });
   }
 }, AI_STEP_MS);
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { activePlayer } from '../../core/engine';
 import type { ReplaySource } from '../../core/replay';
-import type { GameAction, PlayerId } from '../../core/types';
+import type { GameAction, LogEntry, PlayerId } from '../../core/types';
 import type { PublicState } from '../../core/visibility';
 import type { ClientMsg, ServerMsg } from '../../../server/protocol';
 import { sfx } from '../audio';
@@ -30,7 +30,7 @@ function clientId(): string {
 
 /**
  * WebSocket 地址：
- *   1. 优先用 URL 参数 ?srv=ws://192.168.1.5:8787（Vite 开发服务器与联机服务器分离时）
+ *   1. 优先用 URL 参数 ?srv=ws://192.168.1.5:8080（Vite 开发服务器与联机服务器分离时）
  *   2. 否则连同源地址（由联机服务器一并托管前端时）
  */
 function serverUrl(): string {
@@ -43,7 +43,7 @@ function serverUrl(): string {
     const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
     return `${proto}//${location.host}/ws`;
   } catch {
-    return 'ws://localhost:8787/ws';
+    return 'ws://localhost:8080/ws';
   }
 }
 
@@ -78,6 +78,8 @@ export function useOnlineGame(enabled: boolean): GameApi {
   const [aiControlled, setAiControlled] = useState<[boolean, boolean]>([false, false]);
   /** 终局时由服务器下发的种子，用于本地复盘重放 */
   const [replaySeed, setReplaySeed] = useState<number | null>(null);
+  /** 终局时服务器下发的完整日志（对局中收到的日志动作已被掩码，不能用于重放） */
+  const [finalLog, setFinalLog] = useState<LogEntry[] | null>(null);
   const [attempt, setAttempt] = useState(0);
 
   const prevLog = useRef(0);
@@ -109,15 +111,7 @@ export function useOnlineGame(enabled: boolean): GameApi {
       // 刷新或断线后自动回到原房间
       const saved = code;
       if (saved) {
-        const savedSeat = sessionStorage.getItem(SEAT_KEY);
-        send({
-          t: 'ROOM_JOIN',
-          code: saved,
-          clientId: clientId(),
-          ...(savedSeat === '0' || savedSeat === '1'
-            ? { resumeSeat: Number(savedSeat) as PlayerId }
-            : {}),
-        });
+        send({ t: 'ROOM_JOIN', code: saved, clientId: clientId() });
       }
     };
 
@@ -154,6 +148,7 @@ export function useOnlineGame(enabled: boolean): GameApi {
           setSeat(msg.seat);
           setView(msg.view);
           setStarted(true);
+          setFinalLog(null);
           prevLog.current = msg.view.log.length;
           try {
             sessionStorage.setItem(SEAT_KEY, String(msg.seat));
@@ -180,6 +175,7 @@ export function useOnlineGame(enabled: boolean): GameApi {
         case 'OVER':
           setView((v) => (v ? { ...v, victory: msg.victory } : v));
           if (typeof msg.seed === 'number') setReplaySeed(msg.seed);
+          if (msg.log) setFinalLog(msg.log);
           sfx.play(msg.victory.winner === seat || msg.victory.type === 'draw' ? 'win' : 'lose');
           break;
         case 'ERROR':
@@ -278,6 +274,8 @@ export function useOnlineGame(enabled: boolean): GameApi {
         setSeat(null);
         setStarted(false);
         setView(null);
+        setFinalLog(null);
+        setReplaySeed(null);
         try {
           sessionStorage.removeItem(CODE_KEY);
           sessionStorage.removeItem(SEAT_KEY);
@@ -291,11 +289,12 @@ export function useOnlineGame(enabled: boolean): GameApi {
 
   const actor = view && !view.victory ? activePlayer(view) : null;
 
-  /** 联机复盘：服务器在终局时下发 seed，配合本端已收到的完整日志重放 */
+  /** 联机复盘：服务器在终局时下发 seed 与完整日志（对局中日志的动作已被掩码） */
   const replay = useCallback((): ReplaySource | null => {
     if (replaySeed === null || !view) return null;
-    return { seed: replaySeed, log: view.log, names: ['玩家一', '玩家二'], options: { pantheon, agora } };
-  }, [replaySeed, view, pantheon, agora]);
+    if (!finalLog || finalLog.length < view.log.length) return null;
+    return { seed: replaySeed, log: finalLog, names: ['玩家一', '玩家二'], options: { pantheon, agora } };
+  }, [replaySeed, finalLog, view, pantheon, agora]);
 
   return {
     view,

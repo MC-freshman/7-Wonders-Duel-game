@@ -2,7 +2,8 @@ import { appendFileSync } from 'node:fs';
 import type { MiniSocket } from './ws';
 import { activePlayer, applyAction, initialState, legalActions } from '../src/core/engine';
 import { chooseAction, type Difficulty } from '../src/ai/index';
-import { publicView } from '../src/core/visibility';
+import { getAiPool } from './aiPool';
+import { publicView, maskSecretLogAction } from '../src/core/visibility';
 import { isSecretLeaked } from '../src/core/visibility';
 import type { GameAction, GameState, PlayerId } from '../src/core/types';
 import {
@@ -47,6 +48,8 @@ export class Room {
 
   /** AI 托管时的出招难度 */
   aiDifficulty: Difficulty = 'medium';
+  /** worker 决策在途标记：同一房间一回合只允许一个在途决策 */
+  private aiInFlight = false;
 
   readonly seats: [Seat, Seat] = [
     { ws: null, ready: false, connected: false, disconnectedAt: null, clientId: null, actionWindow: { start: 0, count: 0 }, aiControlled: false },
@@ -169,13 +172,18 @@ export class Room {
 
   /** 一次截取增量日志，按座位生成两份脱敏 UPDATE。
    *  Pantheon 引入玩家私有信息（献祭 token 面值）后必须按座位裁剪：
-   *  每个座位只看得见自己的面值。并发出的视图都会过泄漏断言。 */
+   *  每个座位只看得见自己的面值。并发出的视图都会过泄漏断言。
+   *  增量条目与 lastAction 的私密字段（密谋 id、面朝下神格）同样掩码——
+   *  完整未掩码日志只在终局 OVER 下发（见 server/index.ts overMsg）。 */
   updateMsgs(): [Extract<ServerMsg, { t: 'UPDATE' }>, Extract<ServerMsg, { t: 'UPDATE' }>] {
     const state = this.state!;
-    const entries = state.log.slice(this.sentLog);
+    const entries = state.log
+      .slice(this.sentLog)
+      .map((e) => (e.action ? { ...e, action: maskSecretLogAction(e.action) } : e));
     const from = this.sentLog;
     this.sentLog = state.log.length;
-    const lastAction = state.log[state.log.length - 1]?.action ?? null;
+    const lastRaw = state.log[state.log.length - 1]?.action ?? null;
+    const lastAction = lastRaw ? maskSecretLogAction(lastRaw) : null;
     const make = (seat: PlayerId | null): Extract<ServerMsg, { t: 'UPDATE' }> => {
       const view = publicView(state, seat);
       const leaks = isSecretLeaked(view);
@@ -243,19 +251,15 @@ export class Room {
 
   /**
    * 若当前行动方已由 AI 接管，则代其出招。
+   * 决策优先在 worker 线程计算（hard 档 4s 搜索不再阻塞事件循环、拖慢全部房间）；
+   * worker 不可用 / 超时 / 抛错时回落主线程同步计算。两种路径的兜底语义一致：
+   * AI 异常时随机走一步合法动作，宁可下得差也绝不能让对局卡死。
    * 返回是否推进了状态（true 表示调用方需要广播一次 UPDATE）。
    */
-  aiStep(): boolean {
+  async aiStep(): Promise<boolean> {
     const state = this.state;
     if (!state || state.victory) return false;
-
-    // M10 打点：各分段耗时，慢段（>1.5s）同步落盘，进程冻结后也能事后定位
-    const probeOn = process.env.AI_PROBE === '1';
-    const probeLog = (text: string) => {
-      try {
-        appendFileSync(process.env.AI_PROBE_FILE ?? 'aiProbe.log', `${new Date().toISOString()} ${text}\n`);
-      } catch { /* 忽略写失败 */ }
-    };
+    if (this.aiInFlight) return false;
 
     const actor = activePlayer(state);
     if (actor === null) {
@@ -266,37 +270,73 @@ export class Room {
       if (process.env.AI_DEBUG && actor === 1) console.error(`[AI调试] actor=${actor} 未被接管 aiCtl=${this.seats[actor].aiControlled} phase=${state.phase}`);
       return false;
     }
-
-    const t0 = Date.now();
     const actions = legalActions(state, actor);
-    const tLegal = Date.now();
     if (actions.length === 0) {
       if (process.env.AI_DEBUG) console.error(`[AI调试] 无合法动作 phase=${state.phase} pending=${JSON.stringify(state.pending)?.slice(0, 200)}`);
       return false;
     }
-    if (probeOn && tLegal - t0 > 1500) probeLog(`慢段 legalActions ${tLegal - t0}ms room=${this.code} phase=${state.phase} actor=${actor}`);
 
+    const pool = getAiPool();
+    if (!pool) return this.aiStepSync(state, actor, actions);
+
+    this.aiInFlight = true;
+    const t0 = Date.now();
+    try {
+      let action: GameAction;
+      try {
+        const decision = await pool.request(state, actor, this.aiDifficulty);
+        action = decision.action;
+      } catch (err) {
+        if (process.env.AI_PROBE === '1') this.probeLog(`worker 决策失败回落同步 room=${this.code} err=${String(err).slice(0, 160)}`);
+        // await 期间状态可能已被 NEW_GAME 换掉：先确认再兜底
+        if (this.state !== state) return false;
+        action = this.aiChooseFallback(actions);
+      }
+      if (this.state !== state) return false; // 决策期间对局已重开，本步作废
+      const id = `ai-${actor}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const res = this.apply(actor, action, id);
+      const took = Date.now() - t0;
+      if (took > 5000) console.warn(`[AI慢步] ${took}ms(worker) actor=${actor} ${JSON.stringify(action).slice(0, 120)}`);
+      if (!res.ok && process.env.AI_DEBUG) console.error(`[AI调试] 动作被拒：${res.reason} ${JSON.stringify(action).slice(0, 160)}`);
+      return res.ok;
+    } finally {
+      this.aiInFlight = false;
+    }
+  }
+
+  /** M10 打点：各分段耗时，慢段（>1.5s）同步落盘，进程冻结后也能事后定位 */
+  private probeLog(text: string): void {
+    try {
+      appendFileSync(process.env.AI_PROBE_FILE ?? 'aiProbe.log', `${new Date().toISOString()} ${text}\n`);
+    } catch { /* 忽略写失败 */ }
+  }
+
+  /** AI 异常时的兜底出招：随机合法动作 */
+  private aiChooseFallback(actions: GameAction[]): GameAction {
+    return actions[Math.floor(Math.random() * actions.length)];
+  }
+
+  /** 同步回落路径（worker 不可用时）：旧行为，主线程内完成决策 */
+  private aiStepSync(state: GameState, actor: PlayerId, actions: GameAction[]): boolean {
+    const probeOn = process.env.AI_PROBE === '1';
+
+    const t0 = Date.now();
     let action: GameAction;
-    let degraded = false;
     try {
       const decision = chooseAction(state, actor, this.aiDifficulty);
       action = decision.action;
-      degraded = decision.degraded === true;
     } catch (err) {
-      if (probeOn) probeLog(`chooseAction 抛异常 room=${this.code} err=${String(err).slice(0, 160)}`);
-      // 兜底：AI 异常时随机走一步合法动作，宁可下得差也绝不能让对局卡死
-      action = actions[Math.floor(Math.random() * actions.length)];
+      if (probeOn) this.probeLog(`chooseAction 抛异常 room=${this.code} err=${String(err).slice(0, 160)}`);
+      action = this.aiChooseFallback(actions);
     }
     const tChoose = Date.now();
-    if (probeOn && tChoose - tLegal > 1500) probeLog(`慢段 chooseAction ${tChoose - tLegal}ms room=${this.code} phase=${state.phase} actor=${actor} degraded=${degraded} acts=${actions.length}`);
+    if (probeOn && tChoose - t0 > 1500) this.probeLog(`慢段 chooseAction(同步) ${tChoose - t0}ms room=${this.code} actor=${actor} acts=${actions.length}`);
 
     const id = `ai-${actor}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const res = this.apply(actor, action, id);
     const tApply = Date.now();
-    if (probeOn && tApply - tChoose > 1500) probeLog(`慢段 apply ${tApply - tChoose}ms room=${this.code} action=${JSON.stringify(action).slice(0, 140)}`);
-    const took = tApply - t0;
-    if (took > 5000) console.warn(`[AI慢步] ${took}ms actor=${actor} ${JSON.stringify(action).slice(0, 120)}`);
-    if (probeOn && took > 1500) probeLog(`慢步合计 ${took}ms room=${this.code} legal=${tLegal - t0} choose=${tChoose - tLegal} apply=${tApply - tChoose} ok=${res.ok} phase=${state.phase} age=${state.age}`);
+    if (probeOn && tApply - tChoose > 1500) this.probeLog(`慢段 apply ${tApply - tChoose}ms room=${this.code} action=${JSON.stringify(action).slice(0, 140)}`);
+    if (tApply - t0 > 5000) console.warn(`[AI慢步] ${tApply - t0}ms(同步) actor=${actor} ${JSON.stringify(action).slice(0, 120)}`);
     if (!res.ok && process.env.AI_DEBUG) console.error(`[AI调试] 动作被拒：${res.reason} ${JSON.stringify(action).slice(0, 160)}`);
     return res.ok;
   }

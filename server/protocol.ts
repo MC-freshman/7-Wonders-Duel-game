@@ -13,13 +13,7 @@ import type { PublicState } from '../src/core/visibility';
 
 export type ClientMsg =
   | { t: 'ROOM_CREATE'; clientId: string }
-  | {
-      t: 'ROOM_JOIN';
-      code: string;
-      clientId: string;
-      /** 断线重连时希望回到原座位 */
-      resumeSeat?: PlayerId;
-    }
+  | { t: 'ROOM_JOIN'; code: string; clientId: string }
   | { t: 'READY'; ready: boolean }
   /** 开始对局。房主专属；pantheon 标记是否启用万神殿扩展（经 ROOM 广播给双方） */
   | { t: 'START'; pantheon?: boolean; agora?: boolean }
@@ -64,10 +58,12 @@ export type ServerMsg =
   /** 对手连接状态（含重连倒计时截止时间戳） */
   | { t: 'PEER'; connected: boolean; deadline: number | null }
   /**
-   * 对局结束。附带 seed 用于客户端复盘重放——
+   * 对局结束。附带 seed 与**完整日志**供客户端复盘重放——
    * 只在终局时下发，此时已无隐藏信息可泄露。
+   * 对局中的 UPDATE 视图与增量日志会对动作的私密字段（密谋 id、面朝下神格）
+   * 做掩码，复盘必须用本消息携带的完整日志，不能用对局中累积的掩码日志。
    */
-  | { t: 'OVER'; victory: VictoryInfo; seed?: number }
+  | { t: 'OVER'; victory: VictoryInfo; seed?: number; log?: LogEntry[] }
   | { t: 'PONG'; ts: number }
   | { t: 'ERROR'; reason: string };
 
@@ -82,9 +78,28 @@ export function makeRoomCode(rand: () => number = Math.random): string {
   return s;
 }
 
-/** 动作相等性比较：全字段严格匹配，作为服务器端的合法性白名单比对手段 */
+/**
+ * 动作相等性比较：按字段结构化比较（键序无关），作为服务器端的合法性白名单比对手段。
+ * 旧实现用 JSON.stringify 整体比较，客户端与服务器构造动作的键序稍有差异
+ * （跨版本窗口期 / 第三方客户端）就会把合法动作误判为非法。
+ */
 export function sameAction(a: GameAction, b: GameAction): boolean {
-  return JSON.stringify(a) === JSON.stringify(b);
+  if (a.type !== b.type || a.player !== b.player) return false;
+  const x = a as unknown as Record<string, unknown>;
+  const y = b as unknown as Record<string, unknown>;
+  const keys = Object.keys(x);
+  if (keys.length !== Object.keys(y).length || keys.some((k) => !(k in y))) return false;
+  for (const k of keys) {
+    const va = x[k];
+    const vb = y[k];
+    if (va === vb) continue;
+    // 数组字段（INVOKE_DIVINITY.offerings）按内容比较
+    if (Array.isArray(va) && Array.isArray(vb) && JSON.stringify(va) === JSON.stringify(vb)) {
+      continue;
+    }
+    return false;
+  }
+  return true;
 }
 
 /** 把客户端动作中的 player 字段强制对齐到其座位，防止冒充对手 */

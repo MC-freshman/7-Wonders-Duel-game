@@ -6,6 +6,7 @@ tsconfig.tsbuildinfo
 
 # 发布打包产物
 release/
+backup-*/
 
 # 日志与临时文件
 *.log

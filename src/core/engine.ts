@@ -669,11 +669,20 @@ export function legalActions(state: ReadableState, p: PlayerId): GameAction[] {
 /* ------------------------------ 动作应用 ------------------------------ */
 
 export function applyAction(prev: GameState, action: GameAction): GameState {
+  // 登记本动作，由它产生的第一条日志领走（见 pendingAction 注释）。
+  // finally 保证异常中断时不把残留动作带进下一次调用——否则联机服务器的
+  // 下一间房（甚至下一局）的第一条日志会携带本动作，回放从此错位。
+  pendingAction = action;
+  try {
+    return applyActionInner(prev, action);
+  } finally {
+    pendingAction = null;
+  }
+}
+
+function applyActionInner(prev: GameState, action: GameAction): GameState {
   const state = clone(prev);
   const p = action.player;
-
-  // 登记本动作，由它产生的第一条日志领走（见 pendingAction 注释）
-  pendingAction = action;
 
   switch (action.type) {
     case 'DRAFT_WONDER':
@@ -1051,11 +1060,8 @@ function applyPlaceDivinity(
 
   pan.board[action.position] = action.divinityId;
   pend.steps.shift();
-  pushLog(
-    state,
-    action.player,
-    `将「${DIVINITY_BY_ID[action.divinityId]?.zh ?? action.divinityId}」面朝下放到图板`,
-  );
+  // 日志不得点名面朝下的神格（对手在实体桌上看不到）；落子者本人自然记得自己放了谁
+  pushLog(state, action.player, '将 1 位神格面朝下放到图板');
   afterPantheonChoice(state);
 }
 
@@ -1421,6 +1427,12 @@ function applyChoosePantheon(
       case 'theatreDeck': {
         const deck = deckOf(choice);
         const options = deck.slice();
+        // 同一动作的其它效果可能先抽走该神话组最后一张神格。
+        // 此时剧场已无可供选择的牌，继续处理后续待决即可。
+        if (options.length === 0) {
+          pushLog(state, p, `通神大剧场：「${mythLabel(choice as Mythology)}」组已无神格`);
+          break;
+        }
         pend.payload = choice;
         unshiftPantheonStep(state, p, {
           kind: 'invokePick',
@@ -2090,9 +2102,11 @@ function applyConspiracyMain(state: GameState, p: PlayerId, main: string): void 
     case 'free-build-removed-2':
     case 'free-build-removed-3': {
       const age = Number(main.slice(-1)) as 1 | 2 | 3;
+      // 官方（Agora 规则书 p.18）：Age I 取「时代 I 移除的 3 张」、Age II 取「时代 I+II 的 6 张」、
+      // Age III 取「三个时代共 9 张」——累计；行会/神殿不属于「时代牌堆被移除的卡」
       const options = state.removedFromGame.filter((id) => {
         const c = CARD_BY_ID[id];
-        return c && c.age === age && c.type !== 'senator';
+        return c && c.age <= age && c.type !== 'senator' && !c.guild && !c.temple;
       });
       if (options.length === 0) return;
       push({ kind: 'pickBuild', options }, 'free-build-removed');
@@ -2104,7 +2118,10 @@ function applyConspiracyMain(state: GameState, p: PlayerId, main: string): void 
       return;
     }
     case 'peek-removed-build': {
-      const options = state.removedFromGame.filter((id) => CARD_BY_ID[id]?.type !== 'senator');
+      const options = state.removedFromGame.filter((id) => {
+        const c = CARD_BY_ID[id];
+        return c && c.age <= state.age && c.type !== 'senator' && !c.guild && !c.temple;
+      });
       if (options.length === 0) return;
       push({ kind: 'pickBuild', options }, 'free-build-removed');
       return;

@@ -16,6 +16,11 @@ const GUID = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
 export const OPEN = 1;
 export const CLOSED = 3;
 
+/** 单连接接收缓冲上限：超限即断（防慢速垃圾流耗内存） */
+const MAX_RX_BUFFER = 1 << 20;
+/** 分片重组的片数上限 */
+const MAX_FRAGMENTS = 64;
+
 export interface MiniSocket {
   readyState: number;
   send(data: string): void;
@@ -104,6 +109,12 @@ class SocketImpl implements MiniSocket {
 
   private onData(chunk: Buffer): void {
     this.buf = this.buf.length === 0 ? chunk : Buffer.concat([this.buf, chunk]);
+
+    // 恶意客户端不得用慢速垃圾流 / 无穷分片耗尽内存（对局消息都是小 JSON，1MB 绰绰有余）
+    if (this.buf.length > MAX_RX_BUFFER || this.fragments.length > MAX_FRAGMENTS) {
+      this.terminate();
+      return;
+    }
 
     // 尽可能把缓冲区里的完整帧都解出来
     for (;;) {

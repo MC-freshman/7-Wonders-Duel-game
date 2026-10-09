@@ -4,12 +4,63 @@ import type { ReplaySource } from '../../core/replay';
 import { publicView } from '../../core/visibility';
 import type { GameAction, GameState, PlayerId } from '../../core/types';
 import { chooseAction, type Difficulty } from '../../ai';
+import type { AiWorkerRequest, AiWorkerResponse } from '../../ai/aiWorker';
 import { sfx } from '../audio';
 import type { GameApi } from './types';
 
 /* ------------------------------------------------------------------
- * 本地热座 / 人机：状态就在本端，applyAction 直接推进
+ * 本地热座 / 人机：状态就在本端，applyAction 直接推进。
+ * AI 决策在 Web Worker 里算（hard 时间墙 4s，不能冻结主线程）；
+ * worker 不可用（老环境 / 测试装置）或超时则回落主线程同步计算。
  * ------------------------------------------------------------------ */
+
+/** worker 决策的超时上限：hard 时间墙 4s，留足余量 */
+const AI_WORKER_TIMEOUT_MS = 12_000;
+
+/** 单例 worker：跨对局复用；创建失败（如无 Worker 环境）返回 null */
+let sharedWorker: Worker | null | undefined;
+function getAiWorker(): Worker | null {
+  if (sharedWorker !== undefined) return sharedWorker;
+  try {
+    if (typeof Worker === 'undefined') {
+      sharedWorker = null;
+      return null;
+    }
+    sharedWorker = new Worker(new URL('../../ai/aiWorker.ts', import.meta.url), { type: 'module' });
+  } catch {
+    sharedWorker = null;
+  }
+  return sharedWorker;
+}
+
+let aiRequestId = 0;
+
+/** 在 worker 里算一步 AI；任何失败（创建 / 超时 / 崩溃）都 reject，由调用方回落同步 */
+function requestAiMove(
+  state: GameState,
+  difficulty: Difficulty,
+): Promise<{ action: GameAction }> {
+  const worker = getAiWorker();
+  if (!worker) return Promise.reject(new Error('worker unavailable'));
+  return new Promise((resolve, reject) => {
+    const id = ++aiRequestId;
+    const timer = setTimeout(() => {
+      worker.removeEventListener('message', onMessage);
+      reject(new Error('ai worker timeout'));
+    }, AI_WORKER_TIMEOUT_MS);
+    const onMessage = (ev: MessageEvent<AiWorkerResponse>) => {
+      const msg = ev.data;
+      if (!msg || msg.id !== id) return;
+      clearTimeout(timer);
+      worker.removeEventListener('message', onMessage);
+      if (msg.ok) resolve({ action: msg.action });
+      else reject(new Error(msg.error));
+    };
+    worker.addEventListener('message', onMessage);
+    const req: AiWorkerRequest = { id, state, me: 1, difficulty };
+    worker.postMessage(req);
+  });
+}
 
 export function useLocalGame(
   enabled: boolean,
@@ -45,14 +96,28 @@ export function useLocalGame(
 
   useEffect(() => {
     if (!aiTurn) return;
+    let cancelled = false;
     const t = setTimeout(() => {
-      const before = state.log.length;
-      const { action } = chooseAction(state, 1, difficulty);
-      const next = applyAction(state, action);
-      setState(next);
-      playSfxFor(next, before);
+      void (async () => {
+        const before = state.log.length;
+        let action: GameAction;
+        try {
+          // 主推路径：Web Worker（不阻塞 UI 动画与输入）
+          ({ action } = await requestAiMove(state, difficulty));
+        } catch {
+          // 回落路径：worker 不可用 / 超时 / 崩溃 —— 主线程同步算，慢但正确
+          action = chooseAction(state, 1, difficulty).action;
+        }
+        if (cancelled) return;
+        const next = applyAction(state, action);
+        setState(next);
+        playSfxFor(next, before);
+      })();
     }, 300);
-    return () => clearTimeout(t);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
   }, [aiTurn, state, difficulty]);
 
   const act = useCallback((a: GameAction) => {
