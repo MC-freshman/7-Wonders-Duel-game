@@ -1,0 +1,45 @@
+name: Docker deployment smoke
+
+on:
+  push:
+    branches: [main]
+    paths: ['Dockerfile', '.dockerignore', '.github/workflows/docker.yml', 'package*.json', 'src/**', 'server/**', 'scripts/**']
+  pull_request:
+    paths: ['Dockerfile', '.dockerignore', '.github/workflows/docker.yml', 'package*.json', 'src/**', 'server/**', 'scripts/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci
+      - run: npm run build && npm run server:build
+      - name: Build and run production image
+        run: |
+          docker build -t duel-smoke .
+          docker run -d --name duel-smoke -p 8080:8080 duel-smoke
+          for attempt in $(seq 1 30); do
+            status=$(docker inspect --format '{{.State.Health.Status}}' duel-smoke)
+            if [ "$status" = healthy ]; then exit 0; fi
+            sleep 2
+          done
+          docker logs duel-smoke
+          exit 1
+      - name: HTTP and two-client WebSocket regression
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:8080/ > /dev/null
+          npm run proto:prod -- 3
+      - name: Container diagnostics and cleanup
+        if: always()
+        run: |
+          docker logs duel-smoke || true
+          docker rm -f duel-smoke || true
