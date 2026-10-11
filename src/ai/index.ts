@@ -16,13 +16,9 @@ import type { GameAction, GameState, PlayerId, ScienceSymbol } from '../core/typ
  * 金币、连锁潜力、奇迹可行性、以及对手的即时威胁。
  * ------------------------------------------------------------------ */
 
-export type Difficulty = 'easy' | 'medium' | 'hard';
-
-export const DIFFICULTY_LABEL: Record<Difficulty, string> = {
-  easy: '简单',
-  medium: '中等',
-  hard: '困难',
-};
+import type { Difficulty } from './difficulty';
+export { DIFFICULTY_LABEL } from './difficulty';
+export type { Difficulty } from './difficulty';
 
 interface AiConfig {
   depth: number;

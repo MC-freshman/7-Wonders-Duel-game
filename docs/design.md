@@ -103,12 +103,12 @@
 | 军事代币 | 4 | 触发位置、对手失金 |
 | 军事轨道 | 19 格 + 两端首都 | 3 个区块、4 个 VP 档位 |
 
-### 2.2 明确不做的内容
+### 2.2 范围沿革（截至 2026-10-11）
 
 | 不做 | 原因 |
 |---|---|
-| **Pantheon 扩充**（神明、神话标记、献祭、政治压制、Minerva 等） | 帮助手册与参考表含扩充内容，但首版聚焦基础规则 |
-| **Agora 扩充**（元老院、阴谋、影响力方块、政令等） | 同上 |
+| **Pantheon 扩充** | 已实现（M6）；首版不做的决定已失效 |
+| **Agora 扩充** | 已实现（M7–M11），M12 实体数据校正待资料 |
 | **官方变体规则**（如固定奇迹、不使用军事代币等） | 先保证基础规则可玩，变体作为后续配置项 |
 | **在线匹配/天梯/排名** | 首版仅支持房间码邀请 |
 | **AI 自我对弈训练/神经网络** | 首版 AI 采用搜索 + 启发式 |
@@ -424,13 +424,13 @@ AI 评估当前状态优劣时，综合以下指标（权重随难度调整）�
 | **M4 联机对战** | `packages/server`：房间、同步、断线重连、反作弊 | M1、M2 | 两台浏览器完成完整对局；模拟断线后可恢复 | 网络延迟与状态一致性 |
 | **M5 打磨与扩展接口** | 音效、动画、响应式、观战/复盘接口、配置项 | M2–M4 | 在 1920×1080 与移动端竖屏均可正常游戏；可导入/导出对局日志 | 美术占位；移动端触控精度 |
 | **M6 Pantheon 扩展** | 万神殿图板、神话/献祭 token、11 神格 + 3 大殿 + 2 奇迹、联机按座位脱敏 | M1–M5 | 状态见 `docs/expansion-status.md` | ✅ 已完成（2026-09-04） |
-| **M7 Agora 扩展** | 参议院 6 chamber、参议员招募、密谋 16 张、法令 16 枚、政治霸权 | M6 | 状态见 `docs/expansion-status.md` | 🟡 引擎/联机/UI 完成，AI 策略与偶发问题处理中 |
-| **M8 Agora Solo** | 单人模式：玩家 vs Solo AI（专属规则，按 solo rulebook v1.2） | M7 | 状态见 `docs/expansion-status.md` 路线图 | ⬜ 未开始 |
-| **M9 AI Agora 调优** | 评估函数 Agora 项 + 行为规则 + 强度基线（合体 medium ≥80%） | M7 | 状态见 `docs/expansion-status.md` | ⬜ |
-| **M10 合体慢局专项** | 接管偶发零推进根因排查与修复（aiStep 全链路打点） | M7 | 状态见 `docs/expansion-status.md` | ⬜ |
-| **M11 测试补全** | renderSmoke Agora 场景 + bench JSON 基线 | M9 | 状态见 `docs/expansion-status.md` | ⬜ |
+| **M7 Agora 扩展** | 参议院 6 chamber、参议员招募、密谋 16 张、法令 16 枚、政治霸权 | M6 | 状态见 `docs/expansion-status.md` | ✅ 已完成（当前基线见 expansion-status.md 与 ai-baseline/*-after-fix.json） |
+| **M8 Agora Solo** | 单人模式：玩家 vs Solo AI（专属规则，按 solo rulebook v1.2） | M7 | 状态见 `docs/expansion-status.md` 路线图 | ✅ 已完成（当前基线见 expansion-status.md 与 ai-baseline/*-after-fix.json） |
+| **M9 AI Agora 调优** | 评估函数 Agora 项 + 行为规则 + 强度基线（合体 medium ≥80%） | M7 | 状态见 `docs/expansion-status.md` | ✅ 已完成（当前基线见 expansion-status.md 与 ai-baseline/*-after-fix.json） |
+| **M10 合体慢局专项** | 接管偶发零推进根因排查与修复（aiStep 全链路打点） | M7 | 状态见 `docs/expansion-status.md` | ✅ 已完成（当前基线见 expansion-status.md 与 ai-baseline/*-after-fix.json） |
+| **M11 测试补全** | renderSmoke Agora 场景 + bench JSON 基线 | M9 | 状态见 `docs/expansion-status.md` | ✅ 已完成（当前基线见 expansion-status.md 与 ai-baseline/*-after-fix.json） |
 | **M12 数据校正** | 政治家分区 / chamber 印刷符号（等实物资料） | — | 挂起 | ⬜ |
-| **M13 部署与真机** | N4 真机 / N5 部署 / N6 Lighthouse（需环境） | — | 挂起 | ⬜ |
+| **M13 部署与真机** | N4 真机 / N5 部署 / N6 Lighthouse（需环境） | — | 挂起 | 🟡 pm2 已验、N6 首页达标；Docker / N4 真机待环境 |
 
 ---
 
@@ -489,9 +489,9 @@ AI 评估当前状态优劣时，综合以下指标（权重随难度调整）�
 
 ---
 
-## 10. 下一步建议
+## 10. 剩余验收
 
-1. **确认技术栈**：是否同意 TypeScript + pnpm workspace + WebSocket？
-2. **确认 UI 框架**：React / Vue / 原生 DOM？（本方案倾向 React，因生态与类型工具成熟）
-3. **开始 M1**：优先录入卡牌/奇迹/代币数据，并编写核心规则引擎单元测试。
-4. **美术占位策略**：使用纯色块 + 图标字体，避免版权风险。
+1. N4：iPhone Safari 与 Android Chrome 实体机清单。
+2. N5：Docker 构建与运行。pm2 已于 2026-10-07 验证。
+3. M12：Agora 实体卡面资料；近似范围见 AGORA_DATA.md §8。
+4. AI 强度只能按同一版本/相同采样条件比较，暗牌公平化后的 base 79% 不应沿用旧 100%。

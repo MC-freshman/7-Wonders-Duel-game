@@ -1,0 +1,35 @@
+{
+  "generatedAt": "2026-10-11T03:52:26.310Z",
+  "games": 12,
+  "pantheon": true,
+  "agora": false,
+  "vsRandom": {
+    "easy": {
+      "winRate": 0.8333333333333334,
+      "avgGameMs": 148,
+      "maxStepMs": 59
+    },
+    "medium": {
+      "winRate": 1,
+      "avgGameMs": 665,
+      "maxStepMs": 101
+    },
+    "hard": {
+      "winRate": 1,
+      "avgGameMs": 4807,
+      "maxStepMs": 937
+    }
+  },
+  "headToHead": {
+    "medium-vs-easy": {
+      "winRate": 0.6666666666666666,
+      "avgGameMs": 834,
+      "maxStepMs": 128
+    },
+    "hard-vs-medium": {
+      "winRate": 0.5,
+      "avgGameMs": 5458,
+      "maxStepMs": 861
+    }
+  }
+}

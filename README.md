@@ -3,7 +3,7 @@
 基础版《七大奇迹对决》的浏览器实现。含**本地热座**、**人机对战**（三档难度）、**联机对战**、
 **单人 Solo**（官方变体）。规则引擎是纯函数模块，四种模式共用同一套动作协议与状态结构。
 
-当前版本 **v0.1.4（2026-10-09）**。下载 [最新可玩包](https://github.com/MC-freshman/7-Wonders-Duel-game/releases/latest)，
+当前版本 **v0.1.5（2026-10-11）**。下载 [最新可玩包](https://github.com/MC-freshman/7-Wonders-Duel-game/releases/latest)，
 解压后双击 `启动游戏.exe`（需要 Node.js 18+，无需安装 npm 依赖）。玩家操作见 [使用说明](使用说明.md)，
 本版变化与验证结果见 [发布记录](docs/发布记录.md)。
 

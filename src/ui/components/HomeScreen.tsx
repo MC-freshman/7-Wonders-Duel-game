@@ -1,4 +1,4 @@
-import { DIFFICULTY_LABEL, type Difficulty } from '../../ai/index';
+import { DIFFICULTY_LABEL, type Difficulty } from '../../ai/difficulty';
 import type { SoloLeaderDef } from '../../core/solo/index';
 import type { GameMode } from '../sources/types';
 

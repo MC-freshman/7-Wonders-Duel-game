@@ -1,0 +1,40 @@
+{
+  "date": "2026-10-11",
+  "scope": "生产首页；不代表开局后帧率或实体手机",
+  "url": "http://localhost:8108",
+  "lighthouse": "13.4.1",
+  "conditions": "Chrome 无头，默认移动端模拟节流，每次独立浏览器，正式 Node 服务 gzip；有效测量无批量仿真并行",
+  "before": {
+    "version": "0.1.4",
+    "performance": 85,
+    "TBT_ms": 607
+  },
+  "after": [
+    {
+      "fetchTime": "2026-10-11T04:08:25.082Z",
+      "performance": 100,
+      "TBT_ms": 0,
+      "FCP_ms": 1204.2257,
+      "LCP_ms": 1204.2257,
+      "CLS": 0
+    },
+    {
+      "fetchTime": "2026-10-11T09:42:52.768Z",
+      "performance": 100,
+      "TBT_ms": 0,
+      "FCP_ms": 1221.2177,
+      "LCP_ms": 1221.2177,
+      "CLS": 0
+    },
+    {
+      "fetchTime": "2026-10-11T09:43:17.283Z",
+      "performance": 100,
+      "TBT_ms": 0,
+      "FCP_ms": 1204.7234,
+      "LCP_ms": 1204.7234000000003,
+      "CLS": 0
+    }
+  ],
+  "entry_js_gzip_bytes": 51820,
+  "deferred_app_gzip_bytes": 53600
+}

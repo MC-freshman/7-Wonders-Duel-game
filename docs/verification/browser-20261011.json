@@ -1,0 +1,233 @@
+{
+  "date": "2026-10-11",
+  "production_browser_checks": [
+    {
+      "phase": "hotseat",
+      "began": true,
+      "home": {
+        "found": true,
+        "clicked": true,
+        "selected": true,
+        "paramText": "两人共用本设备，行动方切换时互可见（无隐藏信息）。"
+      },
+      "batches": 3,
+      "steps": 73,
+      "drafts": 8,
+      "builds": 42,
+      "discards": 11,
+      "wonderBuilds": 7,
+      "choices": 5,
+      "finished": true,
+      "winnerText": "终局计分",
+      "logLines": 106,
+      "errors": [],
+      "hasScoreTable": true,
+      "replay": {
+        "pass": true,
+        "notes": [],
+        "modeTag": "复盘模式",
+        "enteredReplay": true,
+        "soloMode": false,
+        "hasSoloBar": false,
+        "readOnlyBar": false,
+        "leaderShown": "",
+        "totalShown": "第 0 / 73 步",
+        "total": 73,
+        "atStart": true,
+        "afterTwoSteps": 2,
+        "stepEntriesShown": true,
+        "midFrame": 36,
+        "midBoard": 19,
+        "midHasResult": false,
+        "endFrame": 73,
+        "endResultTitle": "终局计分",
+        "endHasScoreTable": true,
+        "backFrame": 3,
+        "exitedReplay": true,
+        "boardAfterExit": 19
+      },
+      "pageErrors": [],
+      "pass": true
+    },
+    {
+      "phase": "online",
+      "code": "UUKZQL",
+      "aInGame": true,
+      "bInGame": true,
+      "rounds": 33,
+      "a": {
+        "acted": 35,
+        "waited": 33,
+        "drafts": 4,
+        "builds": 24,
+        "discards": 6,
+        "wonders": 0,
+        "choices": 1,
+        "finished": true,
+        "result": "终局计分",
+        "errors": []
+      },
+      "b": {
+        "acted": 35,
+        "waited": 32,
+        "drafts": 4,
+        "builds": 25,
+        "discards": 5,
+        "wonders": 0,
+        "choices": 1,
+        "finished": true,
+        "result": "终局计分",
+        "errors": []
+      },
+      "pageErrorsA": [],
+      "pageErrorsB": [],
+      "pass": true
+    },
+    {
+      "phase": "online",
+      "code": "LKFK9J",
+      "aInGame": true,
+      "bInGame": true,
+      "rounds": 33,
+      "a": {
+        "acted": 35,
+        "waited": 33,
+        "drafts": 4,
+        "builds": 26,
+        "discards": 4,
+        "wonders": 0,
+        "choices": 1,
+        "finished": true,
+        "result": "终局计分",
+        "errors": []
+      },
+      "b": {
+        "acted": 37,
+        "waited": 32,
+        "drafts": 4,
+        "builds": 28,
+        "discards": 2,
+        "wonders": 0,
+        "choices": 3,
+        "finished": true,
+        "result": "终局计分",
+        "errors": []
+      },
+      "pageErrorsA": [],
+      "pageErrorsB": [],
+      "pass": true
+    },
+    {
+      "phase": "solo",
+      "began": true,
+      "home": {
+        "found": true,
+        "clicked": true,
+        "selected": true,
+        "paramText": "对手领袖随机凯撒（Caesar）汉谟拉比（Hammurabi）克娄巴特拉（Cleopatra）亚里士多德（Aristotle）巴尔基斯（Bilkis）"
+      },
+      "batches": 2,
+      "stalls": 0,
+      "steps": 15,
+      "builds": 10,
+      "discards": 2,
+      "wonderBuilds": 1,
+      "choices": 2,
+      "leaderBusy": 51,
+      "soloBarSeen": true,
+      "decisionSeen": true,
+      "finished": true,
+      "winnerText": "军事压制胜利",
+      "hasReplayBtn": true,
+      "errors": [],
+      "replay": {
+        "pass": true,
+        "notes": [],
+        "modeTag": "复盘模式",
+        "enteredReplay": true,
+        "soloMode": true,
+        "hasSoloBar": true,
+        "readOnlyBar": true,
+        "leaderShown": "蓝克娄巴特拉（Cleopatra）　连动 ▲",
+        "totalShown": "第 0 / 30 步",
+        "total": 30,
+        "atStart": true,
+        "afterTwoSteps": 2,
+        "stepEntriesShown": true,
+        "midFrame": 15,
+        "midBoard": 19,
+        "midHasResult": false,
+        "endFrame": 30,
+        "endResultTitle": "军事压制胜利",
+        "endHasScoreTable": false,
+        "backFrame": 3,
+        "exitedReplay": true,
+        "boardAfterExit": 19
+      },
+      "pageErrors": [],
+      "pass": true
+    },
+    {
+      "phase": "toggles",
+      "steps": [
+        {
+          "step": "first paint is start screen (no auto-start)",
+          "ok": true
+        },
+        {
+          "step": "home extension toggle (real click, summary updates)",
+          "ok": true,
+          "clicked": true,
+          "summary": "当前：本地热座 · 同一台设备　·　万神殿"
+        },
+        {
+          "step": "home extension toggle back off",
+          "ok": true,
+          "on": false,
+          "summary": "当前：本地热座 · 同一台设备　·　无扩展"
+        },
+        {
+          "step": "start game (real click)",
+          "ok": true
+        },
+        {
+          "step": "pantheon on (real click)",
+          "before": "🏛 万神殿关",
+          "after": "🏛 万神殿开",
+          "ok": true
+        },
+        {
+          "step": "pantheon off (real click)",
+          "before": "🏛 万神殿开",
+          "after": "🏛 万神殿关",
+          "ok": true
+        },
+        {
+          "step": "agora on (real click)",
+          "before": "🏛 市政广场关",
+          "after": "🏛 市政广场开",
+          "ok": true
+        }
+      ],
+      "switched": true,
+      "skips": {
+        "first": true,
+        "g1": true,
+        "g2": true,
+        "g3": true
+      },
+      "earlyRun": {
+        "steps": 86,
+        "drafts": 32,
+        "builds": 35,
+        "errors": []
+      },
+      "finalLabels": {
+        "pantheon": "🏛 万神殿关",
+        "agora": "🏛 市政广场关"
+      },
+      "pageErrors": [],
+      "pass": true
+    }
+  ]
+}

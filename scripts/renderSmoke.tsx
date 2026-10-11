@@ -7,6 +7,7 @@
 import { renderToString } from 'react-dom/server';
 import { createElement } from 'react';
 import App from '../src/ui/App';
+import Entry from '../src/ui/Entry';
 import { CardStructure } from '../src/ui/components/CardStructure';
 import { MilitaryTrack } from '../src/ui/components/MilitaryTrack';
 import { ChoiceOverlay, ResultOverlay } from '../src/ui/components/Overlays';
@@ -43,6 +44,10 @@ const onlineMock = (over: Partial<OnlineInfo> = {}): OnlineInfo => ({
 const NAMES: [string, string] = ['玩家一', '玩家二'];
 
 const first = renderToString(createElement(App));
+const entry = renderToString(createElement(Entry));
+if (!entry.includes('home-grid') || !entry.includes('home-pick')) {
+  throw new Error('懒加载入口未渲染模式选择首页');
+}
 console.log('首屏 HTML 长度：', first.length);
 
 /* 用随机策略推进到时代 II */

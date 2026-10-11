@@ -9,13 +9,14 @@
  *   - CSS ≤ 50 KB gzip（2026-09-11 实测 4.3 KB）
  *   - 零图片、零外部字体（音频为程序合成）
  *
- * 完整 Lighthouse 移动端审计已在有 Chrome 的环境验证（2026-09-11，Performance 92）：
+ * Lighthouse 移动端首页审计（2026-10-11）：三次 100，TBT 0ms。
+ * 旧版 v0.1.1/v0.1.3 为 85–86；本轮改前 v0.1.4 为 85，TBT 607ms。
  *   ⚠️ 须用 Lighthouse 13+（11.7.1 在 Chrome 152 下报 NO_LCP、类别分 null）；
  *   ⚠️ 本机 npx shim 损坏时，装到隔离目录用 node 直跑 cli/index.js（完整命令见
  *      docs/deploy-verification.md §5）。标准命令：
  *   npx lighthouse@13 http://localhost:8080 --only-categories=performance \
  *     --form-factor=mobile --output=html --output-path=docs/perf/lighthouse-mobile
- * 实测基线：Performance 92 / FCP 1.4s / LCP 2.4s（静态服务器 gzip + immutable 缓存）。
+ * 原始报告及测量条件见 docs/perf/lighthouse-mobile.report.json 与 measurement-20261011.json。
  * ------------------------------------------------------------------ */
 
 import { gzipSync } from 'node:zlib';
@@ -39,12 +40,21 @@ const rows: { name: string; rawKb: number; gzipKb: number }[] = [];
 
 let jsGzip = 0;
 let cssGzip = 0;
+const html = readFileSync(join(DIST, 'index.html'), 'utf8');
+const initialNames = new Set<string>();
+for (const tag of html.match(/<(?:script|link)\b[^>]*>/g) ?? []) {
+  if (!tag.startsWith('<script') && !/rel="modulepreload"/.test(tag)) continue;
+  const asset = tag.match(/(?:src|href)="[^\"]*\/assets\/([^\"]+)"/);
+  if (asset) initialNames.add(asset[1]);
+}
+let initialJsGzip = 0;
 for (const a of assets) {
   const raw = readFileSync(a.path);
   const gz = gzipSync(raw).length / 1024;
   const rawKb = raw.length / 1024;
   rows.push({ name: a.name, rawKb, gzipKb: gz });
   if (a.name.endsWith('.js')) jsGzip += gz;
+  if (initialNames.has(a.name) && a.name.endsWith('.js')) initialJsGzip += gz;
   if (a.name.endsWith('.css')) cssGzip += gz;
 }
 
@@ -61,7 +71,8 @@ console.log('');
 
 const okJs = jsGzip <= BUDGET.jsGzipKb;
 const okCss = cssGzip <= BUDGET.cssGzipKb;
-console.log(`首屏 JS 合计 gzip：${jsGzip.toFixed(1)} KB（预算 ≤ ${BUDGET.jsGzipKb} KB）→ ${okJs ? '✓' : '✗'}`);
+console.log(`首屏 JS gzip：${initialJsGzip.toFixed(1)} KB（按 index.html 的入口与 modulepreload 计）`);
+console.log(`全部 JS（含延迟加载与 Worker）gzip：${jsGzip.toFixed(1)} KB（预算 ≤ ${BUDGET.jsGzipKb} KB）→ ${okJs ? '✓' : '✗'}`);
 console.log(`CSS 合计 gzip：${cssGzip.toFixed(1)} KB（预算 ≤ ${BUDGET.cssGzipKb} KB）→ ${okCss ? '✓' : '✗'}`);
 
 if (!okJs || !okCss) {

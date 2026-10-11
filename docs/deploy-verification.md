@@ -191,5 +191,5 @@ npm run proto:prod -- 3                # 窗口 B：联机 e2e（打产物）
 | 项 | 阻塞原因 | 到位后的验收 |
 |---|---|---|
 | `docker build -t 7-wonders-duel .` + `docker run` | 本机无 docker | 镜像能起、`curl -I` 200、`proto:prod` 通过 |
-| `pm2 start ecosystem.config.cjs` | 本机无 pm2 | 进程存活、崩溃自动拉起 |
+| `pm2 start ecosystem.config.cjs` | ✅ 2026-10-07 已验启停与 restart | HTTP 200 两轮，见 expansion-status.md |
 | N4 真机清单执行（iOS Safari / Android Chrome） | 无 iOS/Android 设备 | `docs/device-regression-checklist.md` 全勾 |
