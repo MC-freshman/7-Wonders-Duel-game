@@ -430,7 +430,7 @@ AI 评估当前状态优劣时，综合以下指标（权重随难度调整）�
 | **M10 合体慢局专项** | 接管偶发零推进根因排查与修复（aiStep 全链路打点） | M7 | 状态见 `docs/expansion-status.md` | ✅ 已完成（当前基线见 expansion-status.md 与 ai-baseline/*-after-fix.json） |
 | **M11 测试补全** | renderSmoke Agora 场景 + bench JSON 基线 | M9 | 状态见 `docs/expansion-status.md` | ✅ 已完成（当前基线见 expansion-status.md 与 ai-baseline/*-after-fix.json） |
 | **M12 数据校正** | 政治家分区 / chamber 印刷符号（等实物资料） | — | 挂起 | ⬜ |
-| **M13 部署与真机** | N4 真机 / N5 部署 / N6 Lighthouse（需环境） | — | 挂起 | 🟡 pm2 已验、N6 首页达标；Docker / N4 真机待环境 |
+| **M13 部署与真机** | N4 真机 / N5 部署 / N6 Lighthouse（需环境） | — | 挂起 | 🟡 pm2、Docker、N6 已验；N4 真机待设备 |
 
 ---
 
@@ -492,6 +492,6 @@ AI 评估当前状态优劣时，综合以下指标（权重随难度调整）�
 ## 10. 剩余验收
 
 1. N4：iPhone Safari 与 Android Chrome 实体机清单。
-2. N5：Docker 构建与运行。pm2 已于 2026-10-07 验证。
+2. N5：Docker 构建/运行/健康/联机已由 GitHub CI 验证；pm2 已于 2026-10-07 验证。
 3. M12：Agora 实体卡面资料；近似范围见 AGORA_DATA.md §8。
 4. AI 强度只能按同一版本/相同采样条件比较，暗牌公平化后的 base 79% 不应沿用旧 100%。

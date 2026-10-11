@@ -1,0 +1,108 @@
+{
+  "conclusion": "success",
+  "createdAt": "2026-10-11T10:24:58Z",
+  "headSha": "9e2e0f3d3d45d8473a80dcb6a1baa2a5dc3118cf",
+  "jobs": [
+    {
+      "completedAt": "2026-10-11T10:25:29Z",
+      "conclusion": "success",
+      "databaseId": 114447676125,
+      "name": "docker",
+      "startedAt": "2026-10-11T10:25:00Z",
+      "status": "completed",
+      "steps": [
+        {
+          "completedAt": "2026-10-11T10:25:01Z",
+          "conclusion": "success",
+          "name": "Set up job",
+          "number": 1,
+          "startedAt": "2026-10-11T10:25:00Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-11T10:25:02Z",
+          "conclusion": "success",
+          "name": "Run actions/checkout@v4",
+          "number": 2,
+          "startedAt": "2026-10-11T10:25:01Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-11T10:25:06Z",
+          "conclusion": "success",
+          "name": "Run actions/setup-node@v4",
+          "number": 3,
+          "startedAt": "2026-10-11T10:25:02Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-11T10:25:08Z",
+          "conclusion": "success",
+          "name": "Run npm ci",
+          "number": 4,
+          "startedAt": "2026-10-11T10:25:06Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-11T10:25:15Z",
+          "conclusion": "success",
+          "name": "Run npm run build && npm run server:build",
+          "number": 5,
+          "startedAt": "2026-10-11T10:25:08Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-11T10:25:25Z",
+          "conclusion": "success",
+          "name": "Build and run production image",
+          "number": 6,
+          "startedAt": "2026-10-11T10:25:15Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-11T10:25:26Z",
+          "conclusion": "success",
+          "name": "HTTP and two-client WebSocket regression",
+          "number": 7,
+          "startedAt": "2026-10-11T10:25:25Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-11T10:25:27Z",
+          "conclusion": "success",
+          "name": "Container diagnostics and cleanup",
+          "number": 8,
+          "startedAt": "2026-10-11T10:25:26Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-11T10:25:27Z",
+          "conclusion": "success",
+          "name": "Post Run actions/setup-node@v4",
+          "number": 15,
+          "startedAt": "2026-10-11T10:25:27Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-11T10:25:28Z",
+          "conclusion": "success",
+          "name": "Post Run actions/checkout@v4",
+          "number": 16,
+          "startedAt": "2026-10-11T10:25:27Z",
+          "status": "completed"
+        },
+        {
+          "completedAt": "2026-10-11T10:25:28Z",
+          "conclusion": "success",
+          "name": "Complete job",
+          "number": 17,
+          "startedAt": "2026-10-11T10:25:28Z",
+          "status": "completed"
+        }
+      ],
+      "url": "https://github.com/MC-freshman/7-Wonders-Duel-game/actions/runs/38131865466/job/114447676125"
+    }
+  ],
+  "updatedAt": "2026-10-11T10:25:29Z",
+  "url": "https://github.com/MC-freshman/7-Wonders-Duel-game/actions/runs/38131865466"
+}

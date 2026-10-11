@@ -1,3 +1,14 @@
+## Docker 补验完成（2026-10-11）
+
+本机仍未安装 Docker；使用 GitHub Ubuntu runner 验证现有 Dockerfile。
+镜像构建、容器启动和 healthy 状态、HTTP 首页字节一致、双客户端 WebSocket 3/3 对局通过，容器已清理。
+运行记录：https://github.com/MC-freshman/7-Wonders-Duel-game/actions/runs/38131865466
+源码 ref 9e2e0f3，运行代码与 v0.1.5 相同；元信息在 docs/verification/docker-ci-20261011.json。
+pm2 已于10-07本机验证，N5 已完成这两条路线的验证；不代表生产域名/HTTPS 已部署。
+N4 实体手机与 M12 实体资料仍待外部条件。
+
+---
+
 # 部署产物验证记录（N5 运行时 + N6 Lighthouse）
 
 > 验证日期：2026-09-11
